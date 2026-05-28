@@ -130,34 +130,6 @@ tr:hover td{background:var(--surface2)}
   <!-- DASHBOARD BANNER -->
   <div id="dashboard-banner" style="display:none;background:var(--red-bg);border:1px solid #fca5a5;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--red-text)"></div>
 
-  <!-- REPORT TAB -->
-  <div id="tab-report" class="section">
-    <div class="card">
-      <div class="card-title">Сформировать отчёт</div>
-      <div class="row">
-        <div class="field"><label>Заказчик</label>
-          <select id="rep-client"><option value="">— все —</option></select>
-        </div>
-        <div class="field"><label>Дата с</label><input type="date" id="rep-from"></div>
-        <div class="field"><label>Дата по</label><input type="date" id="rep-to"></div>
-      </div>
-      <button class="btn btn-primary" onclick="generateReport()">Сформировать</button>
-    </div>
-    <div id="report-output" style="display:none">
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button class="btn" onclick="copyReport()">📋 Скопировать текст</button>
-        <button class="btn" onclick="exportExcel()">📊 Экспорт Excel</button>
-      </div>
-      <div id="report-preview" class="card" style="font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.6"></div>
-    </div>
-  </div>
-
-  <!-- ARCHIVE TAB -->
-  <div id="tab-archive" class="section">
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Завершённые задания (все выкупы со статусом "Реклама сделана")</div>
-    <div id="archive-list"><div class="empty">Нет завершённых заданий</div></div>
-  </div>
-
   <div id="tab-tasks" class="section active">
     <div class="card">
       <div class="card-title">Новое задание</div>
@@ -183,11 +155,11 @@ tr:hover td{background:var(--surface2)}
     <div id="tasks-list"><div class="loading">Загрузка...</div></div>
   </div>
 
-  <div id="tab-schedule" class="section">
+<div id="tab-schedule" class="section">
     <div id="schedule-view"><div class="empty">Загрузка...</div></div>
   </div>
 
-  <div id="tab-finance" class="section">
+<div id="tab-finance" class="section">
     <div class="metrics" id="fin-metrics"></div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
       <div style="padding:12px 16px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border)">По заказчикам</div>
@@ -195,11 +167,11 @@ tr:hover td{background:var(--surface2)}
     </div>
     <div class="card" style="padding:0;overflow:hidden">
       <div style="padding:12px 16px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border)">По исполнителям</div>
-      <table><thead><tr><th>Исполнитель</th><th>Тип</th><th>Выкупов</th><th>Доход ₽</th><th>Расходы ₽</th><th>Прибыль ₽</th></tr></thead><tbody id="fin-exec"></tbody></table>
+      <table><thead><tr><th>Исполнитель</th><th>Тип</th><th>Выкупов</th><th>Расходы ₽</th></tr></thead><tbody id="fin-exec"></tbody></table>
     </div>
   </div>
 
-  <div id="tab-calendar" class="section">
+<div id="tab-calendar" class="section">
     <div class="cal-nav">
       <button class="btn btn-sm" onclick="calMove(-1)">← Назад</button>
       <span id="cal-title"></span>
@@ -213,6 +185,44 @@ tr:hover td{background:var(--surface2)}
       <span><span style="background:var(--blue-bg);padding:2px 7px;border-radius:3px;color:var(--blue-text)">■</span> Предстоит</span>
     </div>
   </div>
+
+<div id="tab-report" class="section">
+    <div class="card">
+      <div class="card-title">Сформировать отчёт</div>
+      <div class="row">
+        <div class="field"><label>Заказчик</label>
+          <select id="rep-client"><option value="">— все —</option></select>
+        </div>
+        <div class="field"><label>Дата с</label><input type="date" id="rep-from"></div>
+        <div class="field"><label>Дата по</label><input type="date" id="rep-to"></div>
+      </div>
+      <button class="btn btn-primary" onclick="generateReport()">Сформировать</button>
+    </div>
+    <div id="report-output" style="display:none">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn" onclick="copyReport()">📋 Скопировать текст</button>
+        <button class="btn" onclick="exportExcel()">📊 Экспорт Excel</button>
+      </div>
+      <div id="report-preview" class="card" style="font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.6"></div>
+    </div>
+  </div>
+
+<div id="tab-archive" class="section">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Завершённые задания (все выкупы со статусом "Реклама сделана")</div>
+    <div id="archive-list"><div class="empty">Нет завершённых заданий</div></div>
+  </div>
+  
+
+  <!-- ARCHIVE TAB -->
+  
+
+  
+
+  
+
+  
+
+  
 </div>
 <div id="vladik-secret" onclick="vladikSecret()" style="position:fixed;bottom:0;right:0;width:20px;height:20px;cursor:pointer;opacity:0" title=""></div>
 
@@ -887,11 +897,16 @@ function renderFinance(){
     return`<tr><td style="font-weight:500">${c}</td><td>${v.n}</td><td>${v.qty} шт</td><td>${v.inc.toLocaleString('ru')}₽</td><td>${v.cost.toLocaleString('ru')}₽</td><td style="font-weight:600;color:var(--${pp>=0?'green':'red'})">${pp>=0?'+':''}${pp.toLocaleString('ru')}₽</td></tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:14px">Нет данных</td></tr>';
   const byE={};
-  tasks.forEach(t=>{t.schedule.forEach(d=>{d.entries.forEach(e=>{if(!e.executor||e.status==='planned')return;const k=e.executor+'|'+e.type;if(!byE[k])byE[k]={ex:e.executor,type:e.type,qty:0,inc:0,cost:0};byE[k].qty+=d.qty;byE[k].inc+=t.priceC*(d.qty/d.entries.length);byE[k].cost+=e.priceMine||0;});});});
-  document.getElementById('fin-exec').innerHTML=Object.values(byE).sort((a,b)=>b.qty-a.qty).map(v=>{
-    const pp=v.inc-v.cost;
-    return`<tr><td>${v.ex}</td><td><span class="badge b-${v.type==='blogger'?'blue':'amber'}">${v.type==='blogger'?'Блогер':'Симка'}</span></td><td>${v.qty}</td><td>${v.inc.toLocaleString('ru')}₽</td><td>${v.cost.toLocaleString('ru')}₽</td><td style="font-weight:600;color:var(--${pp>=0?'green':'red'})">${pp>=0?'+':''}${pp.toLocaleString('ru')}₽</td></tr>`;
-  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:14px">Нет данных</td></tr>';
+  tasks.forEach(t=>{t.schedule.forEach(d=>{d.entries.forEach(e=>{
+    if(!e.executor||e.status==='planned')return;
+    const k=e.executor+'|'+e.type;
+    if(!byE[k])byE[k]={ex:e.executor,type:e.type,count:0,cost:0};
+    byE[k].count++;
+    byE[k].cost+=e.priceMine||0;
+  });});});
+  document.getElementById('fin-exec').innerHTML=Object.values(byE).sort((a,b)=>b.count-a.count).map(v=>{
+    return`<tr><td>${v.ex}</td><td><span class="badge b-${v.type==='blogger'?'blue':'amber'}">${v.type==='blogger'?'Блогер':'Симка'}</span></td><td>${v.count} выкупов</td><td>${v.cost.toLocaleString('ru')}₽</td></tr>`;
+  }).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--text2);padding:14px">Нет данных</td></tr>';
 }
 
 // ---- Calendar ----
@@ -1073,7 +1088,13 @@ function exportExcel(){
 }
 
 // ---- Utils ----
-function todayStr(){return new Date().toISOString().slice(0,10);}
+function todayStr(){
+  const d=new Date();
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
 function isoDate(d){return d.toISOString().slice(0,10);}
 function addDays(s,n){const d=new Date(s);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'';const[y,m,day]=d.split('-');const mn=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];return parseInt(day)+' '+mn[parseInt(m)-1];}
