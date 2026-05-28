@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Планировщик выкупов</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#e2e0d8;
+  --text:#1a1a18;--text2:#6b6960;
+  --blue:#2563eb;--blue-bg:#eff6ff;--blue-text:#1d4ed8;
+  --amber:#d97706;--amber-bg:#fffbeb;--amber-text:#92400e;
+  --green:#16a34a;--green-bg:#f0fdf4;--green-text:#15803d;
+  --red:#dc2626;--red-bg:#fef2f2;--red-text:#991b1b;
+  --radius:10px;--radius-sm:6px;
+}
+body{font-family:'Golos Text',sans-serif;background:var(--bg);color:var(--text);font-size:14px;min-height:100vh}
+.app{max-width:980px;margin:0 auto;padding:20px 16px}
+h1{font-size:20px;font-weight:600;margin-bottom:4px}
+.subtitle{font-size:13px;color:var(--text2);margin-bottom:20px}
+.tabs{display:flex;gap:2px;background:var(--surface2);border-radius:var(--radius);padding:4px;margin-bottom:20px;width:fit-content;flex-wrap:wrap}
+.tab{padding:7px 15px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--text2);border-radius:var(--radius-sm);transition:all .15s}
+.tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.section{display:none}.section.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:12px}
+.card-title{font-size:15px;font-weight:600;margin-bottom:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
+.field{display:flex;flex-direction:column;gap:4px;flex:1;min-width:110px}
+.field label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
+input[type=text],input[type=date],input[type=number],select{font-family:'Golos Text',sans-serif;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);width:100%;outline:none;transition:border .15s}
+input:focus,select:focus{border-color:#999}
+.btn{padding:8px 14px;font-size:13px;font-weight:500;font-family:'Golos Text',sans-serif;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--surface2)}
+.btn-primary{background:var(--text);color:var(--surface);border-color:var(--text)}.btn-primary:hover{opacity:.85}
+.btn-sm{padding:3px 9px;font-size:11px}
+.btn-danger{color:var(--red);border-color:#fca5a5}.btn-danger:hover{background:var(--red-bg)}
+.btn-icon{padding:3px 7px;font-size:11px;border-radius:20px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-family:'Golos Text',sans-serif}
+.btn-icon:hover{background:var(--border)}
+.badge{display:inline-flex;align-items:center;font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px}
+.b-blue{background:var(--blue-bg);color:var(--blue-text)}
+.b-amber{background:var(--amber-bg);color:var(--amber-text)}
+.b-green{background:var(--green-bg);color:var(--green-text)}
+.b-gray{background:var(--surface2);color:var(--text2)}
+.b-red{background:var(--red-bg);color:var(--red-text)}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.metric-label{font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.metric-val{font-size:20px;font-weight:600}
+.green{color:var(--green)}.red{color:var(--red)}
+.progress-bar{height:5px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:5px}
+.progress-fill{height:100%;background:var(--green);border-radius:3px;transition:width .4s}
+.task-card{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:10px}
+.task-head{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--surface);cursor:pointer;user-select:none;flex-wrap:wrap}
+.task-head:hover{background:var(--surface2)}
+.task-body{padding:12px 14px;border-top:1px solid var(--border);background:var(--surface)}
+.day-grid{display:flex;flex-direction:column;gap:5px}
+.day-row{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px}
+.day-row.remind{border-color:#fca5a5;background:#fff5f5}
+.day-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.day-label{font-size:12px;font-weight:600}
+.day-qty{font-size:11px;color:var(--text2)}
+.slots-row{display:flex;gap:6px;flex-wrap:wrap}
+.slot{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 8px;flex:1;min-width:160px}
+.slot-head{display:flex;align-items:center;gap:4px;margin-bottom:5px;flex-wrap:wrap}
+.warn{color:var(--amber);font-size:10px;margin-top:2px}
+.hint{font-size:12px;padding:7px 11px;background:var(--blue-bg);border-radius:var(--radius-sm);color:var(--blue-text);margin-bottom:10px}
+.hint.error{background:var(--red-bg);color:var(--red-text)}
+.chevron{transition:transform .2s;margin-left:auto;flex-shrink:0}
+.chevron.open{transform:rotate(180deg)}
+.empty{color:var(--text2);font-size:14px;padding:20px 0;text-align:center}
+.loading{text-align:center;padding:30px;color:var(--text2)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px 12px;font-weight:500;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.ac-wrap{position:relative}
+.ac-list{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);z-index:200;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.ac-item{padding:6px 10px;font-size:12px;cursor:pointer}
+.ac-item:hover{background:var(--surface2)}
+.ac-item.isnew{color:var(--blue-text);font-style:italic}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-head{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.cal-day-name{text-align:center;font-size:11px;font-weight:500;color:var(--text2);padding:4px 0}
+.cal-cell{min-height:70px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px;font-size:11px}
+.cal-cell.today{border-color:var(--blue);background:var(--blue-bg)}
+.cal-cell.other-month{opacity:.4}
+.cal-num{font-weight:600;margin-bottom:3px;font-size:12px}
+.cal-event{padding:2px 5px;border-radius:3px;margin-bottom:2px;font-size:10px;line-height:1.3}
+.cal-event.remind-urgent{background:var(--red-bg);color:var(--red-text);font-weight:600}
+.cal-event.remind-soon{background:#fef08a;color:#854d0e}
+.cal-event.ev-normal{background:var(--blue-bg);color:var(--blue-text)}
+.cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.cal-nav span{font-weight:600;font-size:15px;flex:1;text-align:center}
+
+/* User modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--surface);border-radius:var(--radius);padding:28px 32px;min-width:320px;max-width:420px;width:90%}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:6px}
+.modal p{font-size:13px;color:var(--text2);margin-bottom:18px}
+.user-list{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;max-height:220px;overflow-y:auto}
+.user-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background .15s}
+.user-item:hover{background:var(--surface2)}
+.user-dot{width:16px;height:16px;border-radius:50%;flex-shrink:0}
+.user-bar{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:16px}
+.user-badge{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;padding:5px 10px;border-radius:20px;cursor:pointer;border:1px solid var(--border)}
+.task-card.mine{border-width:2px}
+.color-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin:10px 0 16px}
+.color-opt{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s}
+.color-opt:hover{transform:scale(1.15)}
+.color-opt.selected{border-color:var(--text);transform:scale(1.15)}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>📦 Планировщик выкупов</h1>
+  <p class="subtitle">Задания · Расписание · Финансы · Календарь</p>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('tasks')">Задания</button>
+    <button class="tab" onclick="showTab('schedule')">Задания сегодня</button>
+    <button class="tab" onclick="showTab('finance')">Финансы</button>
+    <button class="tab" onclick="showTab('calendar')">📅 Календарь</button>
+    <button class="tab" onclick="showTab('report')">📋 Отчёт</button>
+    <button class="tab" onclick="showTab('archive')">📦 Архив</button>
+  </div>
+
+  <!-- DASHBOARD BANNER -->
+  <div id="dashboard-banner" style="display:none;background:var(--red-bg);border:1px solid #fca5a5;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:var(--red-text)"></div>
+
+  <!-- REPORT TAB -->
+  <div id="tab-report" class="section">
+    <div class="card">
+      <div class="card-title">Сформировать отчёт</div>
+      <div class="row">
+        <div class="field"><label>Заказчик</label>
+          <select id="rep-client"><option value="">— все —</option></select>
+        </div>
+        <div class="field"><label>Дата с</label><input type="date" id="rep-from"></div>
+        <div class="field"><label>Дата по</label><input type="date" id="rep-to"></div>
+      </div>
+      <button class="btn btn-primary" onclick="generateReport()">Сформировать</button>
+    </div>
+    <div id="report-output" style="display:none">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn" onclick="copyReport()">📋 Скопировать текст</button>
+        <button class="btn" onclick="exportExcel()">📊 Экспорт Excel</button>
+      </div>
+      <div id="report-preview" class="card" style="font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.6"></div>
+    </div>
+  </div>
+
+  <!-- ARCHIVE TAB -->
+  <div id="tab-archive" class="section">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Завершённые задания (все выкупы со статусом "Реклама сделана")</div>
+    <div id="archive-list"><div class="empty">Нет завершённых заданий</div></div>
+  </div>
+
+  <div id="tab-tasks" class="section active">
+    <div class="card">
+      <div class="card-title">Новое задание</div>
+      <div class="row">
+        <div class="field"><label>Заказчик (ИП)</label><input type="text" id="t-client" placeholder="Название"></div>
+        <div class="field">
+          <label>Товар</label>
+          <select id="t-product" onchange="onProductChange()"><option value="">— выбрать —</option></select>
+          <input type="text" id="t-product-custom" placeholder="Введи название товара" style="display:none;margin-top:4px" oninput="calcHint()">
+        </div>
+        <div class="field" style="max-width:90px"><label>Кол-во шт.</label><input type="number" id="t-qty" value="28" min="1" oninput="calcHint()"></div>
+        <div class="field" style="max-width:90px"><label>Выкупов/день</label><input type="number" id="t-perday" value="2" min="1" max="10" oninput="calcHint()"></div>
+      </div>
+      <div class="row">
+        <div class="field" style="max-width:130px"><label>Дата начала</label><input type="date" id="t-start"></div>
+        <div class="field" style="max-width:90px"><label>Дней</label><input type="number" id="t-days" value="14" min="1" oninput="calcHint()"></div>
+        <div class="field" style="max-width:120px"><label>Цена заказчика ₽ <span style="color:var(--red)">*</span></label><input type="number" id="t-price-c" placeholder="Обязательно" oninput="this.style.borderColor=this.value?'var(--green)':'var(--red)'"></div>
+      </div>
+      <div id="t-slots-config" style="margin-bottom:12px"></div>
+      <div id="perday-hint" style="display:none" class="hint"></div>
+      <button class="btn btn-primary" onclick="createTask()" style="margin-top:8px">+ Создать задание</button>
+    </div>
+    <div id="tasks-list"><div class="loading">Загрузка...</div></div>
+  </div>
+
+  <div id="tab-schedule" class="section">
+    <div id="schedule-view"><div class="empty">Загрузка...</div></div>
+  </div>
+
+  <div id="tab-finance" class="section">
+    <div class="metrics" id="fin-metrics"></div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <div style="padding:12px 16px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border)">По заказчикам</div>
+      <table><thead><tr><th>Заказчик</th><th>Заданий</th><th>Выкуплено</th><th>Доход ₽</th><th>Расходы ₽</th><th>Прибыль ₽</th></tr></thead><tbody id="fin-clients"></tbody></table>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 16px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border)">По исполнителям</div>
+      <table><thead><tr><th>Исполнитель</th><th>Тип</th><th>Выкупов</th><th>Доход ₽</th><th>Расходы ₽</th><th>Прибыль ₽</th></tr></thead><tbody id="fin-exec"></tbody></table>
+    </div>
+  </div>
+
+  <div id="tab-calendar" class="section">
+    <div class="cal-nav">
+      <button class="btn btn-sm" onclick="calMove(-1)">← Назад</button>
+      <span id="cal-title"></span>
+      <button class="btn btn-sm" onclick="calMove(1)">Вперёд →</button>
+    </div>
+    <div class="cal-head" id="cal-head"></div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
+      <span><span style="background:var(--red-bg);padding:2px 7px;border-radius:3px;color:var(--red-text)">■</span> Просрочено / сегодня</span>
+      <span><span style="background:#fef08a;padding:2px 7px;border-radius:3px">■</span> Завтра забирает</span>
+      <span><span style="background:var(--blue-bg);padding:2px 7px;border-radius:3px;color:var(--blue-text)">■</span> Предстоит</span>
+    </div>
+  </div>
+</div>
+<div id="vladik-secret" onclick="vladikSecret()" style="position:fixed;bottom:0;right:0;width:20px;height:20px;cursor:pointer;opacity:0" title=""></div>
+
+<!-- User modal -->
+<div class="modal-overlay" id="user-modal">
+  <div class="modal">
+    <h2>👋 Привет! Кто ты?</h2>
+    <p>Выбери себя из списка или добавь новое имя</p>
+    <div class="user-list" id="user-list"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input type="text" id="new-user-name" placeholder="Введи имя..." style="flex:1" oninput="checkVladik(this.value)">
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;font-weight:500">Выбери цвет</div>
+    <div class="color-grid" id="color-grid"></div>
+    <div id="vladik-msg" style="display:none;text-align:center;font-size:15px;padding:8px;background:var(--amber-bg);border-radius:var(--radius-sm);margin-bottom:10px;color:var(--amber-text)"></div>
+    <button class="btn btn-primary" onclick="confirmUser()" style="width:100%">Войти</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL='https://jwgpyveqhfasadxsdiuz.supabase.co';
+const SUPABASE_KEY='sb_publishable__olPtWYt8zeRDM8Y7JnSJQ_oVBdgkWW';
+const {createClient}=supabase;
+const db=createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const DEF_PRODUCTS=["Габа","Симфония","Kenzo L'Eau Pour","Black Opium","Эклат","D&G L'Imperatrice","Bois Imperial","L'eau Kenzo","Amouage Guidance","Creed Aventus","Another 13","Jo Malone","Kilian Angels Share","Coffee","Bvlgari Tygar","Tom Ford Lost Cherry","Blanche Byredo","Good Girl","Lancome La Vie est Belle","Cassiopea","Kirke","Black Afgano","The One D&G","Dior Sauvage","Bleu De Chanel","Versace Eros","Molecule 02","Baccarat Rouge 540","Coco Mademoiselle","Lacoste White L12","One Million","Dior J'adore","Chanel No5","Tom Ford Tobacco Vanille","Attar Hayati"];
+const DEF_BLOGGERS=["@lina3_33","@Seva2406","@gadzhimetova_k","@diana_karnetsyan","@Valeryankaaa15","@aylin6890753","@borikovn","@anifesha007","@Kiroshka_life","@Queen_Viktoriya17","@viktoriao20","@nastya_kosmetik1998","@lilia4575","@Zakharova_Anastasija","@rozanovserg","@p_m_mila","@sweet_1325","@Felichhhh","@Anastasia_prudo","@Yulia_Teslenkoo","@Firuzaabu","@lenokaleks","@smalll_angelll","@Solnechnaya88","@Svetlaniaaa","@bililek","@Guilya_Ab","@mila_13s","@Alena_a_aad","@Breadwithgalic","@lkvivlk","@Labina_Elizaveta","@Hillo01","@Sof1_shop","@Gulnasyakupova","@Snezhana_Gri","@aina_magomalieva","@aliengirl_09","@Mari_Atav","@aishkalil","@Tata21011997","@zagidat0303","@Mumi95","@elenkakadeewa","@darya_0505","@lyubov_terina","@Diana_Ra3","@m_lumanova","@krotova_el","@Sona_braid","@zyf_18","@pis1ka22","@uliana_15vld","@ddogxd02","@arnautova28","@shkiper56","@daria0a","@ange1ina01_03"];
+const DEF_SIMS=["2г","3г","4г","5г","6г","7г","8г","9г","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59","60","61","62","63","64","65","66","67","68","69","70","71","72","73","74","75","76","77","78","79","80"];
+const STATUS_OPTS=[{v:'planned',l:'Запланирован'},{v:'ordered',l:'Заказан'},{v:'transit',l:'В пути'},{v:'received',l:'Получен'},{v:'review',l:'Отзыв оставлен'},{v:'done',l:'Реклама сделана'}];
+const STATUS_DONE='done';
+const STATUS_COLOR={
+  planned:'#dc2626',
+  ordered:'#ea580c',
+  transit:'#ca8a04',
+  received:'#2563eb',
+  review:'#16a34a',
+  done:'#15803d'
+};
+const STATUS_BG={
+  planned:'#fef2f2',
+  ordered:'#fff7ed',
+  transit:'#fefce8',
+  received:'#eff6ff',
+  review:'#f0fdf4',
+  done:'#dcfce7'
+};
+
+// ---- User system ----
+const COLORS=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#1abc9c','#3498db','#9b59b6','#e91e63','#00bcd4','#8bc34a','#ff5722','#607d8b'];
+let currentUser=null; // {name, color}
+let allUsers=[]; // [{name, color}]
+let selectedColor=COLORS[0];
+let showAll=false;
+
+async function loadUsers(){
+  const{data}=await db.from('tasks').select('*').eq('id','__users__');
+  if(data&&data[0]&&data[0].data) allUsers=data[0].data.users||[];
+}
+async function saveUsers(){
+  await db.from('tasks').upsert({id:'__users__',data:{users:allUsers},updated_at:new Date().toISOString()});
+}
+
+function renderUserModal(){
+  // color grid
+  const cg=document.getElementById('color-grid');
+  cg.innerHTML=COLORS.map(c=>`<div class="color-opt${c===selectedColor?' selected':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`).join('');
+  // user list
+  const ul=document.getElementById('user-list');
+  if(!allUsers.length){ul.innerHTML='<div style="font-size:13px;color:var(--text2);padding:8px 0">Пока никого нет — добавь себя</div>';return;}
+  ul.innerHTML=allUsers.map(u=>`<div class="user-item" onclick="pickUser('${u.name.replace(/'/g,"\'")}','${u.color}')">
+    <div class="user-dot" style="background:${u.color}"></div>
+    <span style="font-weight:500">${u.name}</span>
+  </div>`).join('');
+}
+
+function selectColor(c){
+  selectedColor=c;
+  document.querySelectorAll('.color-opt').forEach(el=>{
+    el.classList.toggle('selected',el.style.background===c||el.style.backgroundColor===c);
+  });
+}
+
+function pickUser(name,color){
+  document.getElementById('new-user-name').value=name;
+  selectedColor=color;
+  renderUserModal();
+}
+
+// ---- Easter egg for Vladik ----
+function vladikSecret(){
+  vladikClickCount++;
+  if(vladikClickCount>=5){
+    vladikClickCount=0;
+    alert('🐱 Пусичка найден!\n\nВладик, мы знаем что ты здесь. Выкупы сами себя не сделают! 😂\n\n— С любовью, планировщик');
+  }
+}
+
+const VLADIK_NAMES=['владик','vladik','влад','vlad'];
+const VLADIK_MSGS=[
+  'Привет, пусичка 🐱',
+  'О, явился! Ждали-ждали 😏',
+  'Владик online! Шеф доволен 😎',
+  'Пусичка вернулся домой 🏠🐾',
+  'Ну наконец-то, а то выкупы сами себя не сделают 😂'
+];
+let vladikClickCount=0;
+
+function checkVladik(name){
+  if(VLADIK_NAMES.some(v=>name.toLowerCase().includes(v))){
+    const msg=VLADIK_MSGS[Math.floor(Math.random()*VLADIK_MSGS.length)];
+    const el=document.getElementById('vladik-msg');
+    if(el){el.textContent=msg;el.style.display='block';}
+  }
+}
+
+async function confirmUser(){
+  const name=document.getElementById('new-user-name').value.trim();
+  if(!name){alert('Введи имя');return;}
+  currentUser={name,color:selectedColor};
+  // save if new
+  if(!allUsers.find(u=>u.name.toLowerCase()===name.toLowerCase())){
+    allUsers.push({name,color:selectedColor});
+    await saveUsers();
+  }
+  localStorage.setItem('buyout_user',JSON.stringify(currentUser));
+  document.getElementById('user-modal').style.display='none';
+  renderUserBar();
+  renderTasks();renderSchedSel();renderFinance();
+}
+
+function renderUserBar(){
+  if(!currentUser)return;
+  const app=document.querySelector('.app');
+  let bar=document.getElementById('user-bar');
+  if(!bar){
+    bar=document.createElement('div');
+    bar.id='user-bar';
+    bar.className='user-bar';
+    app.insertBefore(bar,app.firstChild);
+  }
+  bar.innerHTML=`
+    <div class="user-badge" style="background:${currentUser.color}20;border-color:${currentUser.color}" onclick="switchUser()">
+      <div style="width:10px;height:10px;border-radius:50%;background:${currentUser.color}"></div>
+      <span>${currentUser.name}</span>
+    </div>
+    <span style="font-size:12px;color:var(--text2)">Показать:</span>
+    <button class="btn btn-sm${!showAll?' btn-primary':''}" onclick="setShowAll(false)">Мои</button>
+    <button class="btn btn-sm${showAll?' btn-primary':''}" onclick="setShowAll(true)">Все</button>
+  `;
+}
+
+function switchUser(){
+  document.getElementById('user-modal').style.display='flex';
+  renderUserModal();
+}
+
+function setShowAll(val){
+  showAll=val;
+  renderUserBar();
+  renderTasks();renderSchedSel();
+}
+
+function getUserColor(name){
+  const u=allUsers.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  return u?u.color:null;
+}
+
+let tasks=[];
+let openTasks=new Set(); // tracks which task cards are open
+let lists={products:[...DEF_PRODUCTS],bloggers:[...DEF_BLOGGERS],sims:[...DEF_SIMS]};
+let slotConfig=[];
+let calDate=new Date();
+
+// ---- DB ----
+async function loadTasks(){
+  const{data}=await db.from('tasks').select('*').order('updated_at',{ascending:false});
+  tasks=(data||[]).filter(r=>r.id!=='__lists__').map(r=>({...r.data,_id:r.id}));
+}
+async function saveTask(t){
+  const{_id,...data}=t;
+  await db.from('tasks').upsert({id:t.id,data,updated_at:new Date().toISOString()});
+}
+async function deleteTaskDB(id){await db.from('tasks').delete().eq('id',id);}
+async function loadLists(){
+  const{data}=await db.from('tasks').select('*').eq('id','__lists__');
+  if(data&&data[0]&&data[0].data){
+    const s=data[0].data;
+    if(s.products) s.products.forEach(p=>{if(!lists.products.find(x=>x.toLowerCase()===p.toLowerCase()))lists.products.push(p);});
+    if(s.bloggers) s.bloggers.forEach(p=>{if(!lists.bloggers.find(x=>x.toLowerCase()===p.toLowerCase()))lists.bloggers.push(p);});
+    if(s.sims)     s.sims.forEach(p=>{if(!lists.sims.find(x=>x.toLowerCase()===p.toLowerCase()))lists.sims.push(p);});
+  }
+}
+async function saveLists(){
+  await db.from('tasks').upsert({id:'__lists__',data:{products:lists.products,bloggers:lists.bloggers,sims:lists.sims},updated_at:new Date().toISOString()});
+}
+async function addToList(type,val){
+  val=val.trim();if(!val)return;
+  const arr=lists[type==='blogger'?'bloggers':'sims'];
+  if(!arr.find(x=>x.toLowerCase()===val.toLowerCase())){arr.push(val);await saveLists();}
+}
+
+// ---- Product select ----
+function initProductSelect(){
+  const ps=document.getElementById('t-product');
+  const cur=ps.value;
+  ps.innerHTML='<option value="">— выбрать —</option>';
+  lists.products.forEach(p=>{
+    const o=document.createElement('option');o.value=p;o.textContent=p;ps.appendChild(o);
+  });
+  const co=document.createElement('option');co.value='__custom__';co.textContent='✏️ Ввести свой...';ps.appendChild(co);
+  if(cur)ps.value=cur;
+}
+function onProductChange(){
+  const v=document.getElementById('t-product').value;
+  const c=document.getElementById('t-product-custom');
+  c.style.display=v==='__custom__'?'block':'none';
+  if(v==='__custom__')c.focus();
+  calcHint();
+}
+function getSelectedProduct(){
+  const v=document.getElementById('t-product').value;
+  if(v==='__custom__')return document.getElementById('t-product-custom').value.trim();
+  return v;
+}
+
+// ---- Slot config ----
+function buildSlotConfig(){
+  const n=parseInt(document.getElementById('t-perday').value)||2;
+  while(slotConfig.length<n)slotConfig.push({type:'sim'});
+  slotConfig=slotConfig.slice(0,n);
+  const el=document.getElementById('t-slots-config');
+  el.innerHTML='<div style="font-size:11px;font-weight:500;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Тип каждого выкупа в день</div><div style="display:flex;gap:8px;flex-wrap:wrap">'+
+    slotConfig.map((s,i)=>`<div style="display:flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 10px">
+      <span style="font-size:12px;color:var(--text2)">Выкуп ${i+1}:</span>
+      <select style="font-size:12px;padding:3px 7px;width:auto" onchange="slotConfig[${i}].type=this.value">
+        <option value="sim"${s.type==='sim'?' selected':''}>Симка</option>
+        <option value="blogger"${s.type==='blogger'?' selected':''}>Блогер</option>
+      </select></div>`).join('')+'</div>';
+}
+
+function calcHint(){
+  buildSlotConfig();
+  const qty=parseInt(document.getElementById('t-qty').value)||0;
+  const days=parseInt(document.getElementById('t-days').value)||0;
+  const perday=parseInt(document.getElementById('t-perday').value)||0;
+  const el=document.getElementById('perday-hint');
+  if(!qty||!days||!perday){el.style.display='none';return;}
+  const total=perday*days;
+  el.style.display='block';
+  if(qty!==total){
+    el.className='hint error';
+    el.innerHTML='⚠ '+qty+' шт ≠ '+perday+' выкупа × '+days+' дней = '+total+' шт.<br>Исправить: '+
+      '<b style="cursor:pointer;text-decoration:underline" onclick="document.getElementById(\'t-qty\').value='+total+';calcHint()">изменить кол-во на '+total+'</b> или '+
+      '<b style="cursor:pointer;text-decoration:underline" onclick="document.getElementById(\'t-days\').value='+Math.ceil(qty/perday)+';calcHint()">изменить дней на '+Math.ceil(qty/perday)+'</b>';
+  } else {
+    el.className='hint';
+    el.textContent='✓ '+perday+' выкупов/день · '+days+' дней · итого '+total+' шт';
+  }
+}
+
+// ---- Create task ----
+async function createTask(){
+  const client=document.getElementById('t-client').value.trim();
+  const product=getSelectedProduct();
+  const qty=parseInt(document.getElementById('t-qty').value)||0;
+  const start=document.getElementById('t-start').value;
+  const days=parseInt(document.getElementById('t-days').value)||0;
+  const perday=parseInt(document.getElementById('t-perday').value)||1;
+  const priceC=parseFloat(document.getElementById('t-price-c').value)||0;
+  if(!client||!product||!qty||!start||!days||!priceC){alert('Заполни все поля, включая цену заказчика');return;}
+  if(qty!==perday*days){alert('Кол-во штук должно совпадать с выкупов/день × дней.\nИспользуй подсказку ниже для исправления.');return;}
+  // save new product
+  if(!lists.products.find(x=>x.toLowerCase()===product.toLowerCase())){
+    lists.products.push(product);await saveLists();initProductSelect();
+  }
+  const schedule=[];
+  for(let d=0;d<days;d++){
+    const date=addDays(start,d);
+    const entries=slotConfig.map(s=>({type:s.type,label:s.type==='blogger'?'Блогер':'Симка',executor:'',status:'planned',pickupDate:'',priceMine:0}));
+    schedule.push({date,qty:perday,entries});
+  }
+  const task={id:'t'+Date.now(),client,product,qty,start,days,perday,slotConfig:[...slotConfig],priceC,schedule,assignedTo:currentUser?currentUser.name:''};
+  tasks.unshift(task);
+  await saveTask(task);
+  document.getElementById('t-client').value='';
+  document.getElementById('t-product').value='';
+  document.getElementById('t-product-custom').value='';
+  document.getElementById('t-product-custom').style.display='none';
+  document.getElementById('t-price-c').value='';
+  document.getElementById('perday-hint').style.display='none';
+  renderTasks();renderSchedSel();renderFinance();
+}
+
+// ---- Render tasks list ----
+async function updateTaskPrice(tid, val){
+  const t=tasks.find(x=>x.id===tid);
+  if(!t)return;
+  t.priceC=parseFloat(val)||0;
+  await saveTask(t);
+  renderTasks();
+  renderFinance();
+}
+
+function renderTasks(){
+  const el=document.getElementById('tasks-list');
+  if(!tasks.length){el.innerHTML='<div class="empty">Нет заданий</div>';return;}
+  const visibleTasks=(!currentUser||showAll)?tasks:tasks.filter(t=>t.assignedTo===currentUser.name);
+  if(!visibleTasks.length){el.innerHTML='<div class="empty">'+(tasks.length&&!showAll?'У тебя нет заданий':'Нет заданий')+'</div>';return;}
+  el.innerHTML=visibleTasks.map(t=>{
+    const doneQty=t.schedule.reduce((s,d)=>d.entries.some(e=>e.status!=='planned')?s+d.qty:s,0);
+    const total=t.schedule.reduce((s,d)=>s+d.entries.length,0);
+    const done=t.schedule.reduce((s,d)=>s+d.entries.filter(e=>e.status==='done'||e.status==='paid').length,0);
+    const pct=total?Math.round(done/total*100):0;
+    const ownerColor=getUserColor(t.assignedTo)||'var(--border)';
+    const ismine=currentUser&&t.assignedTo===currentUser.name;
+    return`<div class="task-card${ismine?' mine':''}" style="${ismine?'border-color:'+currentUser.color:''}">
+      <div class="task-head" onclick="toggleTask('${t.id}')" style="${ismine?'border-left:4px solid '+currentUser.color+';padding-left:10px':''}">
+        <div style="width:8px;height:8px;border-radius:50%;background:${ownerColor};flex-shrink:0"></div>
+        <span style="font-weight:600">${t.client}</span>
+        <span style="color:var(--text2);font-size:13px">${t.product}</span>
+        ${t.assignedTo?`<span style="font-size:11px;color:var(--text2)">👤 ${t.assignedTo}</span>`:''}
+        <span class="badge b-gray">${t.qty} шт · ${t.days} дн</span>
+        <span style="display:flex;align-items:center;gap:5px">
+          ${t.priceC?`<span style="font-size:12px;font-weight:600;color:var(--green-text)">${(t.priceC*t.qty).toLocaleString('ru')}₽</span>`:'<span style="font-size:11px;color:var(--red)">⚠ нет цены</span>'}
+          <input type="number" value="${t.priceC||''}" placeholder="цена ₽"
+            style="width:70px;font-size:11px;padding:2px 6px;border-radius:var(--radius-sm);border:1px solid var(--border)"
+            onchange="updateTaskPrice('${t.id}',this.value)"
+            onclick="event.stopPropagation()"
+            title="Цена заказчика за шт">
+        </span>
+        <span class="badge b-${pct===100?'green':'amber'}">${doneQty}/${t.qty}</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm btn-danger" onclick="deleteTask(event,'${t.id}')">Удалить</button>
+        <span class="chevron" id="chev-${t.id}">▾</span>
+      </div>
+      <div id="tbody-${t.id}" style="display:none">
+        <div style="padding:8px 14px 4px">
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="progress-label" style="font-size:11px;color:var(--text2);margin-top:3px">${pct}% · ${doneQty}/${t.qty} шт</div>
+        </div>
+        <div class="task-body day-grid" id="dg-${t.id}"></div>
+      </div>
+    </div>`;
+  }).join('');
+  tasks.forEach(t=>{
+    renderDayGrid(t.id,'dg-');
+    // restore open state
+    if(openTasks.has(t.id)){
+      const el=document.getElementById('tbody-'+t.id);
+      const ch=document.getElementById('chev-'+t.id);
+      if(el) el.style.display='block';
+      if(ch) ch.classList.add('open');
+    }
+  });
+}
+
+function toggleTask(id){
+  const el=document.getElementById('tbody-'+id);
+  const ch=document.getElementById('chev-'+id);
+  const open=el.style.display==='none';
+  el.style.display=open?'block':'none';
+  if(open) openTasks.add(id); else openTasks.delete(id);;
+  if(ch)ch.classList.toggle('open',open);
+}
+
+// ---- Render day grid ----
+function renderDayGrid(tid,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  const el=document.getElementById(prefix+tid);
+  if(!t||!el)return;
+  const today=todayStr();
+  const tomorrow=addDays(today,1);
+  el.innerHTML=t.schedule.map((day,di)=>{
+    const remind=day.entries.some(e=>e.type==='blogger'&&e.pickupDate&&(e.pickupDate<=today||e.pickupDate===tomorrow));
+    const profit=dayProfit(t,day);
+    return`<div class="day-row${remind?' remind':''}">
+      <div class="day-top">
+        <span class="day-label">${fmtDate(day.date)}</span>
+        <span class="day-qty">${day.qty} шт</span>
+        ${remind?'<span class="badge b-red">⚠ Связаться с блогером!</span>':''}
+        <span style="flex:1"></span>
+        <select style="font-size:11px;padding:4px 8px;border-radius:10px;border:1.5px solid ${STATUS_COLOR[day.entries[0]&&day.entries[0].status||'planned']};color:${STATUS_COLOR[day.entries[0]&&day.entries[0].status||'planned']};background:${STATUS_BG[day.entries[0]&&day.entries[0].status||'planned']};font-weight:600" onchange="setDayStatus('${tid}',${di},this.value,'${prefix}')">
+          ${STATUS_OPTS.map(s=>`<option value="${s.v}"${day.entries[0]&&day.entries[0].status===s.v?' selected':''}>${s.l}</option>`).join('')}
+        </select>
+        ${profit?`<span style="font-size:11px;font-weight:600">${profit}</span>`:''}
+      </div>
+      <div class="slots-row">
+        ${day.entries.map((e,ei)=>renderSlot(tid,di,ei,e,prefix)).join('')}
+        <div class="slot" style="min-width:110px;display:flex;flex-direction:column;gap:5px;justify-content:center;align-items:center;background:var(--surface2);border:1px dashed var(--border)">
+          <div style="font-size:10px;color:var(--text2)">Добавить</div>
+          <button class="btn btn-sm" onclick="addSlot('${tid}',${di},'sim','${prefix}')">+ Симка</button>
+          <button class="btn btn-sm" onclick="addSlot('${tid}',${di},'blogger','${prefix}')">+ Блогер</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderSlot(tid,di,ei,e,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  const dupWarn=e.type==='sim'&&e.executor&&t&&t.schedule.some((d,i)=>i!==di&&d.entries.some(x=>x.type==='sim'&&x.executor===e.executor));
+  return`<div class="slot">
+    <div class="slot-head">
+      <span class="badge b-${e.type==='blogger'?'blue':'amber'}">${e.type==='blogger'?'Блогер':'Симка'}</span>
+      <select style="font-size:11px;padding:3px 8px;border-radius:12px;border:1.5px solid ${STATUS_COLOR[e.status||'planned']};color:${STATUS_COLOR[e.status||'planned']};background:${STATUS_BG[e.status||'planned']};font-weight:600;cursor:pointer" onchange="setSlotStatus('${tid}',${di},${ei},this.value,'${prefix}')">
+        ${STATUS_OPTS.filter(s=>e.type==='sim'?s.v!=='done':true).map(s=>`<option value="${s.v}"${(e.status||'planned')===s.v?' selected':''}>${s.l}</option>`).join('')}
+      </select>
+      <button class="btn-icon" onclick="toggleSlotType('${tid}',${di},${ei},'${prefix}')" title="Сменить тип">⇄</button>
+      <button class="btn-icon" onclick="deleteSlot('${tid}',${di},${ei},'${prefix}')" style="color:var(--red);border-color:#fca5a5" title="Удалить выкуп">✕</button>
+    </div>
+    <div class="ac-wrap">
+      <input type="text" value="${e.executor||''}" placeholder="${e.type==='blogger'?'Ник блогера...':'Номер симки...'}"
+        style="font-size:12px;padding:5px 8px;border-left:3px solid ${STATUS_COLOR[e.status||'planned']}"
+        oninput="acSearch(this,'${tid}',${di},${ei},'${prefix}')"
+        onblur="acBlur(this,'${tid}',${di},${ei},'${prefix}')">
+      <div class="ac-list" id="ac-${tid}-${di}-${ei}" style="display:none"></div>
+    </div>
+    ${dupWarn?'<div class="warn">⚠ симка уже в другой день</div>':''}
+    <div style="margin-top:4px">
+      <input type="number" value="${e.priceMine||''}" placeholder="Моя оплата ₽"
+        style="font-size:11px;padding:3px 7px"
+        onchange="setSlotPrice('${tid}',${di},${ei},this.value)">
+    </div>
+    ${e.type==='blogger'?`<div style="margin-top:4px">
+      <div style="font-size:10px;color:var(--text2);margin-bottom:2px">Дата забора товара</div>
+      <input type="date" value="${e.pickupDate||''}" style="font-size:11px;padding:4px 6px"
+        onchange="setPickupDate('${tid}',${di},${ei},this.value,'${prefix}')">
+    </div>`:''}
+    <div style="margin-top:4px">
+      <input type="text" value="${e.comment||''}" placeholder="Комментарий..."
+        style="font-size:11px;padding:3px 7px"
+        onchange="setSlotComment('${tid}',${di},${ei},this.value)">
+    </div>
+  </div>`;
+}
+
+// ---- Slot actions ----
+async function deleteSlot(tid,di,ei,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  if(t.schedule[di].entries.length<=1){alert('Нельзя удалить последний выкуп дня. Добавь его в другой день сначала.');return;}
+  t.schedule[di].entries.splice(ei,1);
+  t.schedule[di].qty=t.schedule[di].entries.length;
+  await saveTask(t);
+  refresh(tid,prefix);
+}
+
+async function addSlot(tid,di,type,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  t.schedule[di].entries.push({type,label:type==='blogger'?'Блогер':'Симка',executor:'',status:'planned',pickupDate:'',priceMine:0});
+  t.schedule[di].qty=t.schedule[di].entries.length;
+  await saveTask(t);
+  refresh(tid,prefix);
+}
+
+async function toggleSlotType(tid,di,ei,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  const e=t.schedule[di].entries[ei];
+  e.type=e.type==='blogger'?'sim':'blogger';
+  e.label=e.type==='blogger'?'Блогер':'Симка';
+  e.executor='';e.pickupDate='';
+  await saveTask(t);
+  refresh(tid,prefix);
+}
+
+async function setSlotPrice(tid,di,ei,val,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  t.schedule[di].entries[ei].priceMine=parseFloat(val)||0;
+  await saveTask(t);
+  updateTaskProgress(tid);
+  renderFinance();
+}
+
+async function setSlotStatus(tid,di,ei,val,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  t.schedule[di].entries[ei].status=val;
+  await saveTask(t);
+  refresh(tid,prefix);
+  renderFinance();
+}
+
+async function setSlotComment(tid,di,ei,val){
+  const t=tasks.find(x=>x.id===tid);
+  t.schedule[di].entries[ei].comment=val;
+  await saveTask(t);
+}
+
+async function setPickupDate(tid,di,ei,val,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  t.schedule[di].entries[ei].pickupDate=val;
+  await saveTask(t);
+  refresh(tid,prefix);
+  renderCalendar();
+}
+
+async function setDayStatus(tid,di,val,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  t.schedule[di].entries.forEach(e=>e.status=val);
+  await saveTask(t);
+  refresh(tid,prefix);
+}
+
+function refresh(tid,prefix){
+  renderDayGrid(tid,prefix);
+  renderDayGrid(tid,prefix==='dg-'?'sg-':'dg-');
+  updateTaskProgress(tid);
+  renderFinance();
+  // if today tab is open - re-render it
+  if(document.getElementById('tab-schedule').classList.contains('active')){
+    renderSchedule();
+  }
+}
+
+function updateTaskProgress(tid){
+  const t=tasks.find(x=>x.id===tid);
+  if(!t)return;
+  const doneQty=t.schedule.reduce((s,d)=>d.entries.some(e=>e.status!=='planned')?s+d.qty:s,0);
+  const total=t.schedule.reduce((s,d)=>s+d.entries.length,0);
+  const done=t.schedule.reduce((s,d)=>s+d.entries.filter(e=>e.status==='done'||e.status==='paid').length,0);
+  const pct=total?Math.round(done/total*100):0;
+  const fill=document.querySelector('#tbody-'+tid+' .progress-fill');
+  const label=document.querySelector('#tbody-'+tid+' .progress-label');
+  if(fill) fill.style.width=pct+'%';
+  if(label) label.textContent=pct+'% · '+doneQty+'/'+t.qty+' шт';
+}
+
+// ---- Autocomplete ----
+function acSearch(inp,tid,di,ei,prefix){
+  const t=tasks.find(x=>x.id===tid);
+  const e=t.schedule[di].entries[ei];
+  const lst=e.type==='blogger'?lists.bloggers:lists.sims;
+  const val=inp.value.trim();
+  const listEl=document.getElementById('ac-'+tid+'-'+di+'-'+ei);
+  if(!val){listEl.style.display='none';return;}
+  const filtered=lst.filter(x=>x.toLowerCase().includes(val.toLowerCase())).slice(0,10);
+  const isNew=!lst.find(x=>x.toLowerCase()===val.toLowerCase());
+  if(!filtered.length&&!isNew){listEl.style.display='none';return;}
+  listEl.innerHTML=filtered.map(x=>`<div class="ac-item" onmousedown="acPick('${tid}',${di},${ei},'${prefix}','${x.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}',false)">${x}</div>`).join('')+
+    (isNew?`<div class="ac-item isnew" onmousedown="acPick('${tid}',${di},${ei},'${prefix}','${val.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}',true)">+ Добавить «${val}»</div>`:'');
+  listEl.style.display='block';
+}
+
+function acBlur(inp,tid,di,ei,prefix){
+  setTimeout(async()=>{
+    const listEl=document.getElementById('ac-'+tid+'-'+di+'-'+ei);
+    if(listEl)listEl.style.display='none';
+    const t=tasks.find(x=>x.id===tid);
+    const val=inp.value.trim();
+    if(t&&val&&t.schedule[di].entries[ei].executor!==val){
+      t.schedule[di].entries[ei].executor=val;
+      await saveTask(t);renderFinance();
+    }
+  },200);
+}
+
+async function acPick(tid,di,ei,prefix,val,isNew){
+  const t=tasks.find(x=>x.id===tid);
+  const e=t.schedule[di].entries[ei];
+  const lst=e.type==='blogger'?lists.bloggers:lists.sims;
+  const existing=lst.find(x=>x.toLowerCase()===val.toLowerCase());
+  e.executor=existing||val;
+  const listEl=document.getElementById('ac-'+tid+'-'+di+'-'+ei);
+  if(listEl)listEl.style.display='none';
+  if(isNew)await addToList(e.type,e.executor);
+  await saveTask(t);
+  refresh(tid,prefix);
+}
+
+// ---- Day profit ----
+function dayProfit(task,day){
+  const income=(task.priceC||0)*day.qty;
+  const cost=day.entries.reduce((s,e)=>s+(e.priceMine||0),0);
+  if(!income&&!cost)return'';
+  const p=income-cost;
+  return`<span style="color:var(--${p>=0?'green':'red'})">${p>=0?'+':''}${p.toLocaleString('ru')}₽</span>`;
+}
+
+async function deleteTask(ev,id){
+  ev.stopPropagation();
+  if(!confirm('Удалить задание?'))return;
+  tasks=tasks.filter(x=>x.id!==id);
+  await deleteTaskDB(id);
+  renderTasks();renderSchedSel();renderFinance();renderCalendar();
+}
+
+// ---- Schedule tab ----
+function renderSchedSel(){
+  const sel=document.getElementById('sched-task-sel');
+  const cur=sel.value;
+  const stasks=(!currentUser||showAll)?tasks:tasks.filter(t=>t.assignedTo===currentUser.name);
+  sel.innerHTML='<option value="">— выберите задание —</option>'+stasks.map(t=>`<option value="${t.id}">${t.client} / ${t.product} (${t.qty} шт)</option>`).join('');
+  if(cur)sel.value=cur;
+  renderSchedule();
+}
+
+function renderSchedule(){
+  const today=todayStr();
+  const el=document.getElementById('schedule-view');
+  const visibleTasks=(!currentUser||showAll)?tasks:tasks.filter(t=>t.assignedTo===currentUser.name);
+  const todayTasks=visibleTasks.map(t=>({
+    task:t,
+    days:t.schedule.filter(d=>d.date===today)
+  })).filter(x=>x.days.length>0);
+
+  if(!todayTasks.length){
+    el.innerHTML='<div class="empty">На сегодня нет запланированных выкупов 🎉</div>';
+    return;
+  }
+
+  const date=formatDateFull(today);
+  el.innerHTML=`<div style="font-size:15px;font-weight:600;margin-bottom:14px">📅 ${date}</div>`+
+  todayTasks.map(({task:t, days})=>{
+    const di=t.schedule.findIndex(d=>d.date===today);
+    const day=days[0];
+    const remind=day.entries.some(e=>e.type==='blogger'&&e.pickupDate&&(e.pickupDate<=today||e.pickupDate===addDays(today,1)));
+    const profit=dayProfit(t,day);
+    return`<div class="card" style="margin-bottom:10px;${remind?'border-color:#fca5a5;background:#fff5f5':''}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-weight:600;font-size:14px">${t.client}</span>
+        <span style="color:var(--text2);font-size:13px">${t.product}</span>
+        <span class="badge b-gray">${day.qty} шт сегодня</span>
+        ${t.priceC?`<span style="font-size:12px;font-weight:600;color:var(--green-text)">${(t.priceC*t.qty).toLocaleString('ru')}₽ итого</span>`:''}
+        ${remind?'<span class="badge b-red">⚠ Связаться с блогером!</span>':''}
+        <span style="flex:1"></span>
+        <select style="font-size:11px;padding:4px 8px;border-radius:10px;border:1.5px solid ${STATUS_COLOR[day.entries[0]&&day.entries[0].status||'planned']};color:${STATUS_COLOR[day.entries[0]&&day.entries[0].status||'planned']};background:${STATUS_BG[day.entries[0]&&day.entries[0].status||'planned']};font-weight:600" onchange="setDayStatus('${t.id}',${di},this.value,'sg-')">
+          ${STATUS_OPTS.map(s=>`<option value="${s.v}"${day.entries[0]&&day.entries[0].status===s.v?' selected':''}>${s.l}</option>`).join('')}
+        </select>
+        ${profit?`<span style="font-size:11px;font-weight:600">${profit}</span>`:''}
+      </div>
+      <div id="sg-${t.id}" class="day-grid" style="margin-top:0"></div>
+    </div>`;
+  }).join('');
+  // now render day grids into the containers
+  todayTasks.forEach(({task:t})=>{
+    renderDayGrid(t.id,'sg-');
+  });
+}
+
+function formatDateFull(d){
+  if(!d)return'';
+  const[y,m,day]=d.split('-');
+  const months=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  const days=['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+  const date=new Date(d);
+  return parseInt(day)+' '+months[parseInt(m)-1]+', '+days[date.getDay()];
+}
+
+// ---- Finance ----
+function renderFinance(){
+  const allDays=tasks.flatMap(t=>t.schedule.map(d=>({...d,task:t})));
+  const totalIncome=tasks.reduce((s,t)=>s+(t.priceC||0)*t.qty,0);
+  const totalCost=allDays.reduce((s,d)=>s+d.entries.reduce((ss,e)=>ss+(e.priceMine||0),0),0);
+  const p=totalIncome-totalCost;
+  const totalQty=tasks.reduce((s,t)=>s+t.qty,0);
+  document.getElementById('fin-metrics').innerHTML=`
+    <div class="metric"><div class="metric-label">Заданий</div><div class="metric-val">${tasks.length}</div></div>
+    <div class="metric"><div class="metric-label">Выкуплено</div><div class="metric-val">${totalQty} шт</div></div>
+    <div class="metric"><div class="metric-label">Доход ₽</div><div class="metric-val">${totalIncome.toLocaleString('ru')}</div></div>
+    <div class="metric"><div class="metric-label">Расходы ₽</div><div class="metric-val">${totalCost.toLocaleString('ru')}</div></div>
+    <div class="metric"><div class="metric-label">Прибыль ₽</div><div class="metric-val ${p>=0?'green':'red'}">${(p>=0?'+':'')+p.toLocaleString('ru')}</div></div>`;
+  const byC={};
+  tasks.forEach(t=>{
+    if(!byC[t.client])byC[t.client]={n:0,qty:0,inc:0,cost:0};
+    byC[t.client].n++;
+    byC[t.client].inc+=(t.priceC||0)*t.qty;
+    t.schedule.forEach(d=>{
+      byC[t.client].cost+=d.entries.reduce((s,e)=>s+(e.priceMine||0),0);
+      byC[t.client].qty+=d.qty;
+    });
+  });
+  document.getElementById('fin-clients').innerHTML=Object.entries(byC).map(([c,v])=>{
+    const pp=v.inc-v.cost;
+    return`<tr><td style="font-weight:500">${c}</td><td>${v.n}</td><td>${v.qty} шт</td><td>${v.inc.toLocaleString('ru')}₽</td><td>${v.cost.toLocaleString('ru')}₽</td><td style="font-weight:600;color:var(--${pp>=0?'green':'red'})">${pp>=0?'+':''}${pp.toLocaleString('ru')}₽</td></tr>`;
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:14px">Нет данных</td></tr>';
+  const byE={};
+  tasks.forEach(t=>{t.schedule.forEach(d=>{d.entries.forEach(e=>{if(!e.executor||e.status==='planned')return;const k=e.executor+'|'+e.type;if(!byE[k])byE[k]={ex:e.executor,type:e.type,qty:0,inc:0,cost:0};byE[k].qty+=d.qty;byE[k].inc+=t.priceC*(d.qty/d.entries.length);byE[k].cost+=e.priceMine||0;});});});
+  document.getElementById('fin-exec').innerHTML=Object.values(byE).sort((a,b)=>b.qty-a.qty).map(v=>{
+    const pp=v.inc-v.cost;
+    return`<tr><td>${v.ex}</td><td><span class="badge b-${v.type==='blogger'?'blue':'amber'}">${v.type==='blogger'?'Блогер':'Симка'}</span></td><td>${v.qty}</td><td>${v.inc.toLocaleString('ru')}₽</td><td>${v.cost.toLocaleString('ru')}₽</td><td style="font-weight:600;color:var(--${pp>=0?'green':'red'})">${pp>=0?'+':''}${pp.toLocaleString('ru')}₽</td></tr>`;
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:14px">Нет данных</td></tr>';
+}
+
+// ---- Calendar ----
+function calMove(n){calDate=new Date(calDate.getFullYear(),calDate.getMonth()+n,1);renderCalendar();}
+function renderCalendar(){
+  const y=calDate.getFullYear(),m=calDate.getMonth();
+  const mns=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  document.getElementById('cal-title').textContent=mns[m]+' '+y;
+  document.getElementById('cal-head').innerHTML=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d=>`<div class="cal-day-name">${d}</div>`).join('');
+  const today=todayStr(),tomorrow=addDays(today,1);
+  const evs={};
+  tasks.forEach(t=>t.schedule.forEach(d=>d.entries.forEach(e=>{
+    if(e.type==='blogger'&&e.pickupDate&&e.executor){
+      if(!evs[e.pickupDate])evs[e.pickupDate]=[];
+      evs[e.pickupDate].push({b:e.executor,prod:t.product,isPickup:true});
+      const r=addDays(e.pickupDate,-1);
+      if(!evs[r])evs[r]=[];
+      evs[r].push({b:e.executor,prod:t.product,isRemind:true,pd:e.pickupDate});
+    }
+  })));
+  const first=new Date(y,m,1);
+  let dow=first.getDay();if(dow===0)dow=7;
+  const cells=[];
+  for(let i=1;i<dow;i++){const d=new Date(y,m,1-dow+i);cells.push({dt:isoDate(d),other:true});}
+  const dim=new Date(y,m+1,0).getDate();
+  for(let i=1;i<=dim;i++)cells.push({dt:isoDate(new Date(y,m,i)),other:false});
+  while(cells.length%7){const d=new Date(cells[cells.length-1].dt);d.setDate(d.getDate()+1);cells.push({dt:isoDate(d),other:true});}
+  document.getElementById('cal-grid').innerHTML=cells.map(c=>{
+    const isT=c.dt===today;
+    const dayEvs=evs[c.dt]||[];
+    return`<div class="cal-cell${c.other?' other-month':''}${isT?' today':''}">
+      <div class="cal-num">${parseInt(c.dt.split('-')[2])}</div>
+      ${dayEvs.map(ev=>{
+        if(ev.isRemind){
+          const cls=ev.pd<=today?'remind-urgent':'remind-soon';
+          return`<div class="cal-event ${cls}">📞 ${ev.b}</div>`;
+        }
+        return`<div class="cal-event ev-normal">📦 ${ev.b}</div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ---- Dashboard banner ----
+function renderDashboard(){
+  const today=todayStr();
+  const overdue=[];
+  tasks.forEach(t=>{
+    t.schedule.forEach(d=>{
+      if(d.date<today){
+        d.entries.forEach(e=>{
+          if(e.status==='planned'||e.status==='ordered'){
+            overdue.push({client:t.client,product:t.product,date:d.date,executor:e.executor||'—'});
+          }
+        });
+      }
+    });
+  });
+  const banner=document.getElementById('dashboard-banner');
+  if(overdue.length){
+    banner.style.display='block';
+    banner.innerHTML='⚠️ <b>Просроченные выкупы ('+overdue.length+'):</b> '+overdue.slice(0,3).map(x=>x.client+' / '+x.product+' ('+fmtDate(x.date)+')').join(', ')+(overdue.length>3?' и ещё '+(overdue.length-3)+'...':'');
+  } else {
+    banner.style.display='none';
+  }
+}
+
+// ---- Archive ----
+function renderArchive(){
+  const el=document.getElementById('archive-list');
+  const archived=tasks.filter(t=>t.schedule.every(d=>d.entries.every(e=>e.status==='done')));
+  if(!archived.length){el.innerHTML='<div class="empty">Нет полностью завершённых заданий</div>';return;}
+  el.innerHTML=archived.map(t=>{
+    const total=t.schedule.reduce((s,d)=>s+d.entries.length,0);
+    return`<div class="task-card" style="opacity:.8">
+      <div class="task-head">
+        <span style="font-weight:600">${t.client}</span>
+        <span style="color:var(--text2);font-size:13px">${t.product}</span>
+        <span class="badge b-green">${t.qty} шт · завершено</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="unarchiveTask('${t.id}')">Восстановить</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function unarchiveTask(id){
+  // just re-render tasks with it visible — it stays in DB, archive is just a filter
+  showTab('tasks');
+}
+
+// ---- Report ----
+function initReport(){
+  const sel=document.getElementById('rep-client');
+  const clients=[...new Set(tasks.map(t=>t.client))];
+  sel.innerHTML='<option value="">— все заказчики —</option>'+clients.map(c=>`<option value="${c}">${c}</option>`).join('');
+  const today=todayStr();
+  const weekAgo=addDays(today,-7);
+  document.getElementById('rep-from').value=weekAgo;
+  document.getElementById('rep-to').value=today;
+}
+
+function generateReport(){
+  const client=document.getElementById('rep-client').value;
+  const from=document.getElementById('rep-from').value;
+  const to=document.getElementById('rep-to').value;
+  if(!from||!to){alert('Выбери период');return;}
+  const filtered=tasks.filter(t=>(!client||t.client===client));
+  if(!filtered.length){alert('Нет данных');return;}
+  let lines=[];
+  lines.push('📦 ОТЧЁТ ПО ВЫКУПАМ');
+  lines.push('Период: '+fmtDate(from)+' — '+fmtDate(to));
+  if(client)lines.push('Заказчик: '+client);
+  lines.push('─'.repeat(40));
+  let totalInc=0, totalCost=0;
+  filtered.forEach(t=>{
+    const days=t.schedule.filter(d=>d.date>=from&&d.date<=to);
+    if(!days.length)return;
+    const totalEntries=days.reduce((s,d)=>s+d.entries.length,0);
+    // прогресс — финальный статус "Реклама сделана"
+    const doneEntries=days.reduce((s,d)=>s+d.entries.filter(e=>e.status==='done').length,0);
+    const pct=totalEntries?Math.round(doneEntries/totalEntries*100):0;
+    const inc=(t.priceC||0)*days.reduce((s,d)=>s+d.qty,0);
+    const cost=days.reduce((s,d)=>s+d.entries.reduce((ss,e)=>ss+(e.priceMine||0),0),0);
+    const profit=inc-cost;
+    totalInc+=inc; totalCost+=cost;
+    lines.push('');
+    lines.push('📌 '+t.client+' — '+t.product);
+    lines.push('Сумма заказчика: '+inc.toLocaleString('ru')+'₽  |  Расходы: '+cost.toLocaleString('ru')+'₽  |  Прибыль: '+(profit>=0?'+':'')+profit.toLocaleString('ru')+'₽');
+    lines.push('Прогресс (реклама): '+doneEntries+'/'+totalEntries);
+    const bar='█'.repeat(Math.round(pct/10))+'░'.repeat(10-Math.round(pct/10));
+    lines.push('['+bar+'] '+pct+'%');
+    lines.push('');
+    days.forEach(d=>{
+      d.entries.forEach(e=>{
+        const statusLabel=STATUS_OPTS.find(s=>s.v===e.status)?.l||e.status;
+        const exec=e.executor||'—';
+        const price=e.priceMine?'  оплата: '+e.priceMine+'₽':'';
+        const comment=e.comment?'  ('+e.comment+')':'';
+        lines.push('  '+fmtDate(d.date)+' | '+exec+' | '+statusLabel+price+comment);
+      });
+    });
+  });
+  lines.push('');
+  lines.push('─'.repeat(40));
+  const totalProfit=totalInc-totalCost;
+  lines.push('ИТОГО: доход '+totalInc.toLocaleString('ru')+'₽  |  расходы '+totalCost.toLocaleString('ru')+'₽  |  прибыль '+(totalProfit>=0?'+':'')+totalProfit.toLocaleString('ru')+'₽');
+  lines.push('Сформировано: '+fmtDate(todayStr()));
+  const text=lines.join('\n');
+  document.getElementById('report-preview').textContent=text;
+  document.getElementById('report-output').style.display='block';
+  document.getElementById('report-output').dataset.text=text;
+}
+
+function copyReport(){
+  const text=document.getElementById('report-preview').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=event.target;btn.textContent='✅ Скопировано!';setTimeout(()=>btn.textContent='📋 Скопировать текст',2000);
+  });
+}
+
+function exportExcel(){
+  const client=document.getElementById('rep-client').value;
+  const from=document.getElementById('rep-from').value;
+  const to=document.getElementById('rep-to').value;
+  const filtered=tasks.filter(t=>(!client||t.client===client));
+  let csv='Заказчик,Товар,Дата,Исполнитель,Тип,Статус,Моя оплата,Комментарий\n';
+  filtered.forEach(t=>{
+    t.schedule.filter(d=>d.date>=from&&d.date<=to).forEach(d=>{
+      d.entries.forEach(e=>{
+        const statusLabel=STATUS_OPTS.find(s=>s.v===e.status)?.l||e.status;
+        csv+=`"${t.client}","${t.product}","${fmtDate(d.date)}","${e.executor||''}","${e.type==='blogger'?'Блогер':'Симка'}","${statusLabel}","${e.priceMine||0}","${e.comment||''}"\n`;
+      });
+    });
+  });
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='отчёт_выкупы_'+from+'_'+to+'.csv';a.click();
+}
+
+// ---- Utils ----
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function isoDate(d){return d.toISOString().slice(0,10);}
+function addDays(s,n){const d=new Date(s);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+function fmtDate(d){if(!d)return'';const[y,m,day]=d.split('-');const mn=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];return parseInt(day)+' '+mn[parseInt(m)-1];}
+
+function showTab(t){
+  // highlight correct tab button by its onclick attribute
+  document.querySelectorAll('.tab').forEach(el=>{
+    el.classList.toggle('active', el.getAttribute('onclick')===`showTab('${t}')`);
+  });
+  document.querySelectorAll('.section').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  if(t==='schedule')renderSchedule();
+  if(t==='finance')renderFinance();
+  if(t==='calendar')renderCalendar();
+  if(t==='report')initReport();
+  if(t==='archive')renderArchive();
+}
+
+// ---- Realtime ----
+db.channel('ch').on('postgres_changes',{event:'*',schema:'public',table:'tasks'},async()=>{
+  await loadLists();await loadUsers();await loadTasks();
+  initProductSelect();renderTasks();renderFinance();renderCalendar();renderDashboard();
+  if(document.getElementById('tab-schedule').classList.contains('active')) renderSchedule();
+}).subscribe();
+
+// ---- Boot ----
+async function boot(){
+  await loadLists();
+  await loadUsers();
+  await loadTasks();
+  document.getElementById('t-start').value=todayStr();
+  initProductSelect();
+  buildSlotConfig();
+  calcHint();
+  // restore user from localStorage
+  const saved=localStorage.getItem('buyout_user');
+  if(saved){
+    try{
+      currentUser=JSON.parse(saved);
+      document.getElementById('user-modal').style.display='none';
+      renderUserBar();
+    }catch(e){currentUser=null;}
+  } else {
+    renderUserModal();
+  }
+  renderTasks();renderFinance();renderCalendar();renderDashboard();
+}
+boot();
+</script>
+</body>
+</html>
