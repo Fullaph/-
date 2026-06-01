@@ -250,9 +250,15 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
   <!-- SIM REPORT -->
   <div id="tab-simreport" class="section">
     <div class="card">
-      <div class="card-title">Еженедельный отчёт по симкам</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:12px" id="simrep-week"></div>
-      <button class="btn btn-primary" onclick="generateSimReport()">Сформировать</button>
+      <div class="card-title">Отчёт по симкам</div>
+      <div class="row">
+        <div class="field" style="max-width:140px"><label>Дата с</label><input type="date" id="simrep-from"></div>
+        <div class="field" style="max-width:140px"><label>Дата по</label><input type="date" id="simrep-to"></div>
+        <div style="display:flex;align-items:flex-end">
+          <button class="btn btn-sm" onclick="setSimRepWeek()">Текущая неделя</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="generateSimReport()" style="margin-top:8px">Сформировать</button>
     </div>
     <div id="simreport-output" style="display:none">
       <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -850,6 +856,7 @@ function renderOrderCard(o,context,isDone=false){
       <span style="color:var(--text2);font-size:12px">${o.product}</span>
       ${o.flacon?`<span class="badge b-gray" style="font-size:10px">${o.flacon}</span>`:''}
       <span class="badge b-${o.type==='blogger'?'blue':o.type==='razdacha'?'gray':'amber'}">${o.type==='blogger'?'Блогер':o.type==='razdacha'?'Раздача':'Симка'}</span>
+      ${o.type!=='razdacha'?`<button onclick="toggleOrderType('${o.id}')" style="font-size:10px;padding:2px 7px;border-radius:12px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2)" title="Сменить тип">⇄</button>`:''}
       <span style="font-size:11px;color:var(--text2)">${fmtDate(o.date)}</span>
       ${isStuck?`<span class="badge b-red" style="font-size:10px">⚠ ${stDays}дн</span>`:''}
       ${isDone?'<span class="badge b-green">✓</span>':''}
@@ -978,6 +985,16 @@ async function unconfirmOrder(id){
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   o.confirmed=false;
+  await saveOrder(o);
+  refreshAll();
+}
+
+async function toggleOrderType(id){
+  const o=orders.find(x=>x.id===id);
+  if(!o||o.type==='razdacha')return;
+  o.type=o.type==='sim'?'blogger':'sim';
+  o.executor='';
+  o.pickup_date='';
   await saveOrder(o);
   refreshAll();
 }
@@ -1255,12 +1272,24 @@ function getWeekBounds(){
 
 function initSimReport(){
   const{from,to}=getWeekBounds();
-  const el=document.getElementById('simrep-week');
-  if(el) el.textContent='Неделя: '+fmtDate(from)+' — '+fmtDate(to);
+  const f=document.getElementById('simrep-from');
+  const t=document.getElementById('simrep-to');
+  if(f&&!f.value) f.value=from;
+  if(t&&!t.value) t.value=to;
+}
+
+function setSimRepWeek(){
+  const{from,to}=getWeekBounds();
+  const f=document.getElementById('simrep-from');
+  const t=document.getElementById('simrep-to');
+  if(f) f.value=from;
+  if(t) t.value=to;
 }
 
 function generateSimReport(){
-  const{from,to}=getWeekBounds();
+  const from=document.getElementById('simrep-from')?.value||getWeekBounds().from;
+  const to=document.getElementById('simrep-to')?.value||getWeekBounds().to;
+  {
   const planned=orders.filter(o=>o.type==='sim'&&o.status==='planned'&&o.date>=from&&o.date<=to);
   if(planned.length) alert('⚠ Есть симки со статусом "Запланирован":\n'+planned.slice(0,5).map(o=>o.client+' / '+o.product+' ('+fmtDate(o.date)+')').join('\n')+(planned.length>5?'\n...и ещё '+(planned.length-5):''));
   const groups={};
@@ -1278,11 +1307,14 @@ function generateSimReport(){
   document.getElementById('simreport-preview').textContent=text;
   document.getElementById('simreport-output').style.display='block';
 }
+}
 
 function copySimReport(){navigator.clipboard.writeText(document.getElementById('simreport-preview').textContent).then(()=>{const b=event.target;b.textContent='✅';setTimeout(()=>b.textContent='📋 Скопировать',2000);});}
 
 function exportSimExcel(){
-  const{from,to}=getWeekBounds();
+  const from=document.getElementById('simrep-from')?.value||getWeekBounds().from;
+  const to=document.getElementById('simrep-to')?.value||getWeekBounds().to;
+  {
   const groups={};
   orders.filter(o=>o.type==='sim'&&o.status!=='planned'&&o.date>=from&&o.date<=to).forEach(o=>{
     const key=o.client+'|||'+(o.flacon||'—');
@@ -1295,7 +1327,8 @@ function exportSimExcel(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='симки_'+from+'_'+to+'.csv';a.click();
 }
 
-// ---- Refs ----
+// ---- Refs ----}
+
 function renderRefs(){
   ['clients','products','flacons','bloggers'].forEach(key=>{
     const el=document.getElementById('ref-'+key+'-list');
