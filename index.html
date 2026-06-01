@@ -115,7 +115,7 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
 <div class="app">
   <div id="user-bar-container"></div>
   <h1>📦 Планировщик выкупов</h1>
-  <p class="subtitle">Задания · Сегодня · Заказы · Финансы · Календарь</p>
+  <p class="subtitle" id="app-subtitle">Задания · Сегодня · Заказы · Финансы · Календарь</p>
   <div id="overdue-banner" style="display:none;background:var(--red-bg);border:1px solid #fca5a5;border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--red-text)"></div>
 
   <div class="tabs">
@@ -315,18 +315,26 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
 <!-- User modal -->
 <div class="modal-overlay" id="user-modal">
   <div class="modal">
-    <h2>👋 Привет! Кто ты?</h2>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:18px">Выбери себя или добавь новое имя</p>
-    <div id="user-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-height:200px;overflow-y:auto"></div>
-    <input type="text" id="new-user-name" placeholder="Введи имя..." style="margin-bottom:10px" oninput="checkVladik(this.value)">
-    <div id="vladik-msg" style="display:none;text-align:center;font-size:14px;padding:8px;background:var(--amber-bg);border-radius:var(--radius-sm);margin-bottom:10px;color:var(--amber-text)"></div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;font-weight:500">Выбери цвет</div>
-    <div class="color-grid" id="color-grid"></div>
-    <button class="btn btn-primary" onclick="confirmUser()" style="width:100%">Войти</button>
+    <div id="modal-select-view">
+      <h2 style="margin-bottom:6px">👋 Привет!</h2>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Выбери себя</p>
+      <div id="user-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;max-height:260px;overflow-y:auto"></div>
+      <button class="btn" onclick="showNewUserForm()" style="width:100%;font-size:13px">+ Новый пользователь</button>
+    </div>
+    <div id="modal-new-view" style="display:none">
+      <h2 style="margin-bottom:6px">Новый пользователь</h2>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Введи имя и выбери цвет</p>
+      <input type="text" id="new-user-name" placeholder="Введи имя..." style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;font-weight:500">Выбери цвет</div>
+      <div class="color-grid" id="color-grid"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" onclick="showSelectView()" style="flex:1">← Назад</button>
+        <button class="btn btn-primary" onclick="confirmUser()" style="flex:2">Создать</button>
+      </div>
+    </div>
   </div>
 </div>
 
-<div id="vladik-secret" onclick="vladikSecret()" style="position:fixed;bottom:0;right:0;width:20px;height:20px;cursor:pointer;opacity:0"></div>
 
 <script>
 const SUPABASE_URL='https://jwgpyveqhfasadxsdiuz.supabase.co';
@@ -407,7 +415,7 @@ async function saveUsers(){
 
 // ---- User system ----
 const VLADIK_NAMES=['владик','vladik','влад','vlad'];
-const VLADIK_MSGS=['Привет, пусичка 🐱','О, явился! Ждали-ждали 😏','Владик online! Шеф доволен 😎','Пусичка вернулся домой 🏠🐾','Ну наконец-то, а то выкупы сами себя не сделают 😂'];
+const VLADIK_MSGS=['Привет, пусичка 🐱','О, явился! Ждали-ждали 😏','Владик online! Шеф доволен 😎','Пусичка вернулся домой 🏠🐾','Ну наконец-то, а то выкупы сами себя не сделают 😂','Владик, мы в тебя верим! Почти... 😄','Главный пусичка вошёл в систему 👑'];
 
 function checkVladik(name){
   if(VLADIK_NAMES.some(v=>name.toLowerCase().includes(v))){
@@ -429,11 +437,44 @@ function renderUserModal(){
   if(cg) cg.innerHTML=COLORS.map(c=>`<div class="color-opt${c===selectedColor?' selected':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`).join('');
   const ul=document.getElementById('user-list');
   if(!ul)return;
-  ul.innerHTML=allUsers.length?allUsers.map(u=>`<div onclick="pickUser('${u.name.replace(/'/g,"\\'")}','${u.color}')" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
-    <div style="width:14px;height:14px;border-radius:50%;background:${u.color};flex-shrink:0"></div>
-    <span style="font-weight:500">${u.name}</span>
-  </div>`).join(''):'<div style="font-size:13px;color:var(--text2)">Пока никого нет — добавь себя</div>';
+  if(!allUsers.length){
+    showNewUserForm();
+    return;
+  }
+  ul.innerHTML=allUsers.map(u=>`<div onclick="loginAs('${u.name.replace(/'/g,"\'")}','${u.color}')"
+    style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:background .15s"
+    onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+    <div style="width:20px;height:20px;border-radius:50%;background:${u.color};flex-shrink:0"></div>
+    <span style="font-weight:500;font-size:14px">${u.name}</span>
+    <span style="flex:1"></span>
+    <span style="font-size:12px;color:var(--text2)">→</span>
+  </div>`).join('');
 }
+
+function showNewUserForm(){
+  const sv=document.getElementById('modal-select-view');
+  const nv=document.getElementById('modal-new-view');
+  if(sv) sv.style.display='none';
+  if(nv) nv.style.display='block';
+  const cg=document.getElementById('color-grid');
+  if(cg) cg.innerHTML=COLORS.map(c=>`<div class="color-opt${c===selectedColor?' selected':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`).join('');
+}
+
+function showSelectView(){
+  const sv=document.getElementById('modal-select-view');
+  const nv=document.getElementById('modal-new-view');
+  if(nv) nv.style.display='none';
+  if(sv) sv.style.display='block';
+}
+
+async function loginAs(name,color){
+  currentUser={name,color};
+  localStorage.setItem('buyout_user',JSON.stringify(currentUser));
+  document.getElementById('user-modal').style.display='none';
+  renderUserBar();
+  refreshAll();
+}
+
 
 function selectColor(c){
   selectedColor=c;
@@ -456,6 +497,7 @@ async function confirmUser(){
   }
   localStorage.setItem('buyout_user',JSON.stringify(currentUser));
   document.getElementById('user-modal').style.display='none';
+  document.getElementById('new-user-name').value='';
   renderUserBar();
   refreshAll();
 }
