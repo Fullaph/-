@@ -715,11 +715,17 @@ async function createOrdersBulk(){
 }
 
 function updateTypeUI(){
-  const type=document.getElementById('n-type').value;
-  document.getElementById('n-executor-label').textContent=type==='sim'?'Номер симки':'Блогер';
-  document.getElementById('n-executor-sim').style.display=type==='sim'?'block':'none';
-  document.getElementById('n-executor-blogger-wrap').style.display=type==='blogger'?'block':'none';
-  document.getElementById('n-pickup-field').style.display=type==='blogger'?'flex':'none';
+  const typeEl=document.getElementById('n-type');
+  if(!typeEl)return;
+  const type=typeEl.value;
+  const lbl=document.getElementById('n-executor-label');
+  const sim=document.getElementById('n-executor-sim');
+  const blog=document.getElementById('n-executor-blogger-wrap');
+  const pickup=document.getElementById('n-pickup-field');
+  if(lbl) lbl.textContent=type==='sim'?'Номер симки':'Блогер';
+  if(sim) sim.style.display=type==='sim'?'block':'none';
+  if(blog) blog.style.display=type==='blogger'?'block':'none';
+  if(pickup) pickup.style.display=type==='blogger'?'flex':'none';
 }
 
 async function createOrders(){
