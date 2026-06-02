@@ -191,7 +191,12 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
         <div class="field" style="max-width:120px"><label>Дата с</label><input type="date" id="ord-from" oninput="renderOrders()"></div>
         <div class="field" style="max-width:120px"><label>Дата по</label><input type="date" id="ord-to" oninput="renderOrders()"></div>
         <div class="field"><label>Заказчик</label><select id="ord-client" onchange="renderOrders()"><option value="">— все —</option></select></div>
-        <div class="field"><label>Аромат</label><select id="ord-product" onchange="renderOrders()"><option value="">— все —</option></select></div>
+        <div class="field"><label>Симка</label>
+          <div class="ac-wrap">
+            <input type="text" id="ord-sim-search" placeholder="Номер симки..." oninput="filterSimSearch(this.value)" onblur="setTimeout(()=>hideOrdSimAc(),200)">
+            <div class="ac-list" id="ord-sim-ac" style="display:none"></div>
+          </div>
+        </div>
         <div class="field"><label>Исполнитель</label><select id="ord-user" onchange="renderOrders()"><option value="">— все —</option></select></div>
         <div class="field"><label>Статус</label><select id="ord-status" onchange="renderOrders()"><option value="">— все —</option></select></div>
         <button class="btn btn-sm" onclick="clearOrdFilters()">Сбросить</button>
@@ -799,10 +804,11 @@ function showHint(id,msg,type){
 
 // ---- Helper: is order finished ----
 function isFinished(o){
-  if(o.type==='blogger') return o.status==='done';
+  // Only truly finished when confirmed=true AND at final status
+  if(o.type==='blogger') return o.status==='done'&&o.confirmed;
   if(o.type==='razdacha') return o.status==='review'&&o.confirmed;
-  // sim: confirmed with non-planned status
-  return o.type==='sim'&&o.confirmed&&o.status!=='planned';
+  if(o.type==='sim') return o.status==='review'&&o.confirmed;
+  return false;
 }
 
 // ---- Main tasks tab: ALL active orders ----
@@ -891,7 +897,8 @@ function renderOrderCard(o,context,isDone=false){
   const statusLabel=STATUS_OPTS.find(s=>s.v===o.status)?.l||o.status;
 
   let cardClass='order-card';
-  if(isDone) cardClass+=' done';
+  const finished=isFinished(o);
+  if(finished) cardClass+=' done';
   else if(isStuck) cardClass+=' stuck';
   else if(o.confirmed) cardClass+=' confirmed-card';
 
@@ -922,9 +929,9 @@ function renderOrderCard(o,context,isDone=false){
         <input type="text" value="${o.comment||''}" placeholder="Комментарий..." style="font-size:11px;padding:3px 7px" onchange="updateField('${o.id}','comment',this.value)">
       </div>
       <div class="order-fields">
-        <select class="status-sel" style="border-color:${STATUS_COLOR[o.status||'planned']};color:${STATUS_COLOR[o.status||'planned']};background:${STATUS_BG[o.status||'planned']}"
+        <select class="status-sel" style="border-color:${STATUS_COLOR[pendingStatus[o.id]||o.status||'planned']};color:${STATUS_COLOR[pendingStatus[o.id]||o.status||'planned']};background:${STATUS_BG[pendingStatus[o.id]||o.status||'planned']}"
           onchange="updateStatus('${o.id}',this.value)">
-          ${(o.type==='razdacha'?STATUS_OPTS_RAZDACHA:STATUS_OPTS.filter(s=>o.type==='sim'?s.v!=='done':true)).map(s=>`<option value="${s.v}"${o.status===s.v?' selected':''}>${s.l}</option>`).join('')}
+          ${(o.type==='razdacha'?STATUS_OPTS_RAZDACHA:STATUS_OPTS.filter(s=>o.type==='sim'?s.v!=='done':true)).map(s=>`<option value="${s.v}"${(pendingStatus['${o.id}']||o.status)===s.v?' selected':''}>${s.l}</option>`).join('')}
         </select>
         <div style="font-size:11px;color:var(--text2)">Цена заказчика: ${(o.price_client||0).toLocaleString('ru')}₽</div>
         ${o.price_mine&&o.price_client?`<div style="font-size:11px;font-weight:600;color:var(--${calcProfit(o)>=0?'green':'red'})">${calcProfit(o)>=0?'+':''}${calcProfit(o).toLocaleString('ru')}₽</div>`:''}
@@ -984,6 +991,9 @@ async function acPickInline(oid,val,isNew){
 }
 
 // ---- Order actions ----
+// Clear pending status is handled per-card, not globally
+// (we want to keep pending for cards still visible)
+
 async function updateField(id,field,val){
   const o=orders.find(x=>x.id===id);
   if(!o)return;
@@ -993,23 +1003,33 @@ async function updateField(id,field,val){
   renderDashboard();
 }
 
-async function updateStatus(id,val){
-  const o=orders.find(x=>x.id===id);
-  if(!o)return;
-  o.status=val;
-  o.status_date=todayStr();
-  o.confirmed=false;
-  o.confirm_warning='';
-  await saveOrder(o);
-  refreshAll();
+function updateStatus(id,val){
+  // Store pending status change - only saved when Принять is clicked
+  pendingStatus[id]=val;
+  // Update UI color immediately
+  const card=document.getElementById('card-'+id);
+  if(card){
+    const sel=card.querySelector('select.status-sel');
+    if(sel){
+      sel.style.borderColor=STATUS_COLOR[val]||'';
+      sel.style.color=STATUS_COLOR[val]||'';
+      sel.style.background=STATUS_BG[val]||'';
+    }
+  }
 }
 
 async function confirmOrderAction(id){
   const o=orders.find(x=>x.id===id);
   if(!o)return;
-  // Special confirm dialog for razdacha/sim review
-  if((o.type==='razdacha'||o.type==='sim')&&o.status==='review'&&!o.confirmed){
-    if(!confirm('Завершить задание?\n\nОтзыв оставлен. Нажми ОК чтобы завершить или Отмена чтобы продолжить.')) return;
+  // Use pending status if set, otherwise current status
+  const effectiveStatus=pendingStatus[id]!==undefined?pendingStatus[id]:o.status;
+  // For blogger: final status is 'done'
+  if(o.type==='blogger'&&effectiveStatus==='done'&&!o.confirmed){
+    if(!confirm('Переместить в архив?\n\nРеклама сделана. Задание будет завершено.')) return;
+  }
+  // For sim/razdacha: final status is 'review'
+  if((o.type==='sim'||o.type==='razdacha')&&effectiveStatus==='review'&&!o.confirmed){
+    if(!confirm('Переместить в архив?\n\nОтзыв оставлен. Задание будет завершено.')) return;
   }
   return _confirmOrderAction(id);
 }
@@ -1017,6 +1037,14 @@ async function confirmOrderAction(id){
 async function _confirmOrderAction(id){
   const o=orders.find(x=>x.id===id);
   if(!o)return;
+  // Apply pending status if any
+  if(pendingStatus[id]!==undefined){
+    o.status=pendingStatus[id];
+    o.status_date=todayStr();
+    o.confirmed=false;
+    o.confirm_warning='';
+    delete pendingStatus[id];
+  }
   const missing=getMissing(o);
   if(missing.length){
     o.confirmed=false;
@@ -1055,17 +1083,44 @@ async function removeOrder(id){
 }
 
 // ---- Orders in work tab ----
+let ordSimFilter=''; // current sim filter value
+let pendingStatus={}; // {orderId: status} - unsaved status changes
+
+function filterSimSearch(val){
+  ordSimFilter=val.trim();
+  const listEl=document.getElementById('ord-sim-ac');
+  if(!listEl)return;
+  if(!val.trim()){listEl.style.display='none';renderOrders();return;}
+  // get sims from current scope (mine or all)
+  const mine=myOrders();
+  const sims=[...new Set(mine.filter(o=>o.type==='sim'&&o.executor&&o.executor.toLowerCase().includes(val.toLowerCase())).map(o=>o.executor))].slice(0,15);
+  if(!sims.length){listEl.style.display='none';renderOrders();return;}
+  listEl.innerHTML=sims.map(s=>`<div class="ac-item" onmousedown="pickSimFilter('${s.replace(/'/g,"\'")}')">🔢 ${s}</div>`).join('');
+  listEl.style.display='block';
+  renderOrders();
+}
+
+function pickSimFilter(val){
+  ordSimFilter=val;
+  const inp=document.getElementById('ord-sim-search');
+  if(inp) inp.value=val;
+  hideOrdSimAc();
+  renderOrders();
+}
+
+function hideOrdSimAc(){
+  const el=document.getElementById('ord-sim-ac');
+  if(el) el.style.display='none';
+}
+
 function initOrdFilters(){
   const clients=[...new Set(orders.map(o=>o.client).filter(Boolean))];
-  const products=[...new Set(orders.map(o=>o.product).filter(Boolean))];
   const users=[...new Set(orders.map(o=>o.assigned_to).filter(Boolean))];
   const cf=document.getElementById('ord-client');
-  const pf=document.getElementById('ord-product');
   const uf=document.getElementById('ord-user');
   const sf=document.getElementById('ord-status');
   if(!cf)return;
   cf.innerHTML='<option value="">— все —</option>'+clients.map(c=>`<option value="${c}">${c}</option>`).join('');
-  pf.innerHTML='<option value="">— все —</option>'+products.map(p=>`<option value="${p}">${p}</option>`).join('');
   uf.innerHTML='<option value="">— все —</option>'+users.map(u=>`<option value="${u}">${u}</option>`).join('');
   sf.innerHTML='<option value="">— все —</option>'+STATUS_OPTS.filter(s=>s.v!=='planned').map(s=>`<option value="${s.v}">${s.l}</option>`).join('');
   if(!document.getElementById('ord-from').value){
@@ -1075,7 +1130,10 @@ function initOrdFilters(){
 }
 
 function clearOrdFilters(){
-  ['ord-client','ord-product','ord-user','ord-status'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ord-client','ord-user','ord-status'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const simInp=document.getElementById('ord-sim-search');
+  if(simInp) simInp.value='';
+  ordSimFilter='';
   document.getElementById('ord-from').value=addDays(todayStr(),-30);
   document.getElementById('ord-to').value=addDays(todayStr(),30);
   renderOrders();
@@ -1085,9 +1143,9 @@ function renderOrders(){
   const from=document.getElementById('ord-from')?.value||'';
   const to=document.getElementById('ord-to')?.value||'';
   const fClient=document.getElementById('ord-client')?.value||'';
-  const fProduct=document.getElementById('ord-product')?.value||'';
   const fUser=document.getElementById('ord-user')?.value||'';
   const fStatus=document.getElementById('ord-status')?.value||'';
+  const fSim=ordSimFilter||'';
 
   const mine=myOrders();
   let rows=mine.filter(o=>{
@@ -1095,9 +1153,9 @@ function renderOrders(){
     if(from&&o.date<from)return false;
     if(to&&o.date>to)return false;
     if(fClient&&o.client!==fClient)return false;
-    if(fProduct&&o.product!==fProduct)return false;
     if(fUser&&o.assigned_to!==fUser)return false;
     if(fStatus&&o.status!==fStatus)return false;
+    if(fSim&&!(o.executor||'').toLowerCase().includes(fSim.toLowerCase()))return false;
     return true;
   });
 
