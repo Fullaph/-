@@ -1367,10 +1367,10 @@ function exportSimExcel(){
   Object.values(groups).forEach(g=>{csv+=`"${g.client}","${g.flacon}","${g.qty}"\n`;});
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='симки_'+from+'_'+to+'.csv';a.click();
+  }
 }
 
-// ---- Refs ----}
-
+// ---- Refs ----
 function renderRefs(){
   ['clients','products','flacons','bloggers'].forEach(key=>{
     const el=document.getElementById('ref-'+key+'-list');
