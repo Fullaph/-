@@ -1051,20 +1051,23 @@ async function _confirmOrderAction(id){
   if(pendingStatus[id]!==undefined){
     o.status=pendingStatus[id];
     o.status_date=todayStr();
-    o.confirmed=false;
-    o.confirm_warning='';
     delete pendingStatus[id];
   }
   const missing=getMissing(o);
   if(missing.length){
     o.confirmed=false;
     o.confirm_warning=missing.join(', ');
+    await saveOrder(o);
+    refreshAll();
   } else {
     o.confirmed=true;
     o.confirm_warning='';
+    await saveOrder(o);
+    // Update local orders array
+    const idx=orders.findIndex(x=>x.id===id);
+    if(idx>=0) orders[idx]={...o};
+    refreshAll();
   }
-  await saveOrder(o);
-  refreshAll();
 }
 
 async function unconfirmOrder(id){
