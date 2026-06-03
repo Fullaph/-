@@ -924,7 +924,7 @@ function renderOrderCard(o,context,isDone=false){
         }
         <input type="number" value="${o.price_mine||''}" placeholder="Моя оплата ₽" style="font-size:12px;padding:5px 8px" onchange="updateField('${o.id}','price_mine',parseFloat(this.value)||0)">
         ${o.type==='blogger'?`<input type="date" value="${o.pickup_date||''}" style="font-size:11px;padding:4px 6px" onchange="updateField('${o.id}','pickup_date',this.value)">`:''}
-        ${o.status==='done'&&o.type==='blogger'?`<input type="text" value="${o.ad_link||''}" placeholder="Ссылка на рекламу..." style="font-size:11px;padding:4px 6px;${o.ad_link?'border-color:var(--green)':''}" onchange="updateField('${o.id}','ad_link',this.value)">`:''}
+        ${o.type==='blogger'&&(o.status==='done'||(pendingStatus['${o.id}']||'')==='done')?`<input type="text" value="${o.ad_link||''}" placeholder="Ссылка на рекламу... (обязательно)" style="font-size:11px;padding:4px 6px;${o.ad_link?'border-color:var(--green)':'border-color:var(--amber)'}" onchange="updateField('${o.id}','ad_link',this.value)">`:''}
         ${o.type==='razdacha'?`<div style="display:flex;gap:6px;align-items:center;margin-top:2px"><span style="font-size:11px;color:var(--text2)">% кэшбэка:</span><input type="number" value="${o.cashback_pct||''}" placeholder="%" style="font-size:11px;padding:3px 6px;width:60px" onchange="updateField('${o.id}','cashback_pct',parseFloat(this.value)||0)"></div>`:''}
         <input type="text" value="${o.comment||''}" placeholder="Комментарий..." style="font-size:11px;padding:3px 7px" onchange="updateField('${o.id}','comment',this.value)">
       </div>
@@ -1006,11 +1006,21 @@ async function updateField(id,field,val){
 function updateStatus(id,val){
   // Store pending status change - only saved when Принять is clicked
   pendingStatus[id]=val;
-  // Update UI color immediately
+  // Re-render card so ad_link field appears for blogger when status=done
+  const o=orders.find(x=>x.id===id);
+  if(!o)return;
   const card=document.getElementById('card-'+id);
-  if(card){
-    const sel=card.querySelector('select.status-sel');
+  if(!card)return;
+  // For blogger switching to 'done' - need to show ad_link field
+  // Re-render the whole card
+  const context=card.closest('#new-tab-today')?'tasks':card.closest('#orders-list')?'orders':card.closest('#today-view')?'today':'tasks';
+  card.outerHTML=renderOrderCard(o,context,isFinished(o));
+  // Restore status select to pending value
+  const newCard=document.getElementById('card-'+id);
+  if(newCard){
+    const sel=newCard.querySelector('select.status-sel');
     if(sel){
+      sel.value=val;
       sel.style.borderColor=STATUS_COLOR[val]||'';
       sel.style.color=STATUS_COLOR[val]||'';
       sel.style.background=STATUS_BG[val]||'';
