@@ -237,29 +237,18 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
     <div class="card">
       <div class="card-title">Отчёт по выкупам</div>
       <div class="row">
-        <div class="field">
-          <label>Заказчик (ИП)</label>
-          <select id="rep-client"><option value="">— все —</option></select>
-        </div>
-        <div class="field" style="max-width:130px"><label>Дата с</label><input type="date" id="rep-from"></div>
-        <div class="field" style="max-width:130px"><label>Дата по</label><input type="date" id="rep-to"></div>
+        <div class="field"><label>Заказчик</label><select id="rep-client"><option value="">— все —</option></select></div>
+        <div class="field"><label>Дата с</label><input type="date" id="rep-from"></div>
+        <div class="field"><label>Дата по</label><input type="date" id="rep-to"></div>
       </div>
       <button class="btn btn-primary" onclick="generateReport()">Сформировать</button>
     </div>
     <div id="report-output" style="display:none">
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="exportReportExcel()">📊 Скачать Excel</button>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn" onclick="copyReport()">📋 Скопировать</button>
+        <button class="btn" onclick="exportReportExcel()">📊 Excel</button>
       </div>
-      <!-- Summary preview -->
-      <div class="card" style="overflow-x:auto;margin-bottom:12px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:10px">Сводка</div>
-        <div id="report-summary-table"></div>
-      </div>
-      <!-- Ad links preview -->
-      <div class="card" style="overflow-x:auto">
-        <div style="font-size:13px;font-weight:600;margin-bottom:10px">Ссылки на рекламу</div>
-        <div id="report-adlinks-table"></div>
-      </div>
+      <div id="report-preview" class="card" style="font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.6"></div>
     </div>
   </div>
 
@@ -1333,162 +1322,62 @@ function initReport(){
   }
 }
 
-function getReportData(){
-  const client=document.getElementById('rep-client').value;
-  const from=document.getElementById('rep-from').value;
-  const to=document.getElementById('rep-to').value;
-  return orders.filter(o=>(!client||o.client===client)&&(!from||o.date>=from)&&(!to||o.date<=to));
-}
-
 function generateReport(){
+  const client=document.getElementById('rep-client').value;
   const from=document.getElementById('rep-from').value;
   const to=document.getElementById('rep-to').value;
   if(!from||!to){alert('Выбери период');return;}
-  const rows=getReportData();
-  if(!rows.length){alert('Нет данных за выбранный период');return;}
-
-  const products=[...new Set(rows.map(o=>o.product).filter(Boolean))].sort();
-  const simSt=[{v:'planned',l:'Запланирован'},{v:'transit',l:'В пути'},{v:'received',l:'Получен'},{v:'review',l:'Отзыв'}];
-  const blogSt=[{v:'planned',l:'Запланирован'},{v:'transit',l:'В пути'},{v:'received',l:'Получен'},{v:'review',l:'Отзыв'},{v:'done',l:'Реклама'}];
-  const razSt=[{v:'planned',l:'Запланирован'},{v:'transit',l:'В пути'},{v:'review',l:'Отзыв'}];
-
-  function cnt(prod,type,status){return rows.filter(o=>o.product===prod&&o.type===type&&o.status===status).length;}
-  function cntAll(prod,type){return rows.filter(o=>o.product===prod&&o.type===type).length;}
-
-  const th='padding:6px 10px;font-size:11px;font-weight:600;text-align:center;border:1px solid #e2e0d8;background:#f0efe9;white-space:nowrap';
-  const td='padding:5px 8px;font-size:12px;text-align:center;border:1px solid #e2e0d8';
-  const tdL='padding:5px 10px;font-size:12px;font-weight:500;border:1px solid #e2e0d8';
-
-  let html=`<table style="border-collapse:collapse;width:100%">
-    <thead>
-      <tr>
-        <th style="${th}" rowspan="2">Аромат</th>
-        <th style="${th}" colspan="${simSt.length+1}">Симка</th>
-        <th style="${th}" colspan="${blogSt.length+1}">Блогер</th>
-        <th style="${th}" colspan="${razSt.length+1}">Раздача</th>
-      </tr>
-      <tr>
-        ${simSt.map(s=>`<th style="${th}">${s.l}</th>`).join('')}<th style="${th}">Итого</th>
-        ${blogSt.map(s=>`<th style="${th}">${s.l}</th>`).join('')}<th style="${th}">Итого</th>
-        ${razSt.map(s=>`<th style="${th}">${s.l}</th>`).join('')}<th style="${th}">Итого</th>
-      </tr>
-    </thead><tbody>`;
-
-  const tS=new Array(simSt.length+1).fill(0);
-  const tB=new Array(blogSt.length+1).fill(0);
-  const tR=new Array(razSt.length+1).fill(0);
-
-  products.forEach(prod=>{
-    html+=`<tr><td style="${tdL}">${prod}</td>`;
-    simSt.forEach((s,i)=>{const n=cnt(prod,'sim',s.v);tS[i]+=n;html+=`<td style="${td}">${n||''}</td>`;});
-    const st=cntAll(prod,'sim');tS[simSt.length]+=st;html+=`<td style="${td};font-weight:600">${st||''}</td>`;
-    blogSt.forEach((s,i)=>{const n=cnt(prod,'blogger',s.v);tB[i]+=n;html+=`<td style="${td}">${n||''}</td>`;});
-    const bt=cntAll(prod,'blogger');tB[blogSt.length]+=bt;html+=`<td style="${td};font-weight:600">${bt||''}</td>`;
-    razSt.forEach((s,i)=>{const n=cnt(prod,'razdacha',s.v);tR[i]+=n;html+=`<td style="${td}">${n||''}</td>`;});
-    const rt=cntAll(prod,'razdacha');tR[razSt.length]+=rt;html+=`<td style="${td};font-weight:600">${rt||''}</td>`;
-    html+='</tr>';
+  let rows=orders.filter(o=>(!client||o.client===client)&&o.date>=from&&o.date<=to);
+  if(!rows.length){alert('Нет данных');return;}
+  const groups={};
+  rows.forEach(o=>{
+    const k=o.client+'|||'+o.product;
+    if(!groups[k])groups[k]={client:o.client,product:o.product,flacon:o.flacon,rows:[],inc:0,cost:0};
+    groups[k].rows.push(o);
+    groups[k].inc+=o.price_client||0;
+    groups[k].cost+=o.price_mine||0;
   });
-
-  html+=`<tr style="background:#f0efe9;font-weight:600"><td style="${tdL}">ИТОГО</td>`;
-  tS.forEach(v=>html+=`<td style="${td}">${v||''}</td>`);
-  tB.forEach(v=>html+=`<td style="${td}">${v||''}</td>`);
-  tR.forEach(v=>html+=`<td style="${td}">${v||''}</td>`);
-  html+='</tr>';
-
-  const totalAll=rows.length;
-  const doneAll=rows.filter(o=>isFinished(o)).length;
-  const pct=totalAll?Math.round(doneAll/totalAll*100):0;
-  html+=`<tr style="background:#f0fdf4"><td style="${tdL};color:#15803d">Завершено</td>
-    <td colspan="${simSt.length+blogSt.length+razSt.length+3}" style="${td};color:#15803d;font-weight:600">${doneAll} из ${totalAll} (${pct}%)</td></tr>`;
-  html+='</tbody></table>';
-  document.getElementById('report-summary-table').innerHTML=html;
-
-  // Ad links
-  const adRows=rows.filter(o=>o.type==='blogger'&&o.ad_link);
-  let adHtml='';
-  if(adRows.length){
-    adHtml=`<table style="border-collapse:collapse;width:100%">
-      <thead><tr>
-        <th style="${th}">ID</th><th style="${th}">Аромат</th>
-        <th style="${th}">Блогер</th><th style="${th}">Дата</th>
-        <th style="${th}">Ссылка на рекламу</th>
-      </tr></thead><tbody>`;
-    adRows.forEach(o=>{
-      adHtml+=`<tr>
-        <td style="${td};font-size:10px;color:#6b6960">${o.id}</td>
-        <td style="${td}">${o.product||''}</td>
-        <td style="${td}">${o.executor||''}</td>
-        <td style="${td}">${fmtDate(o.date)}</td>
-        <td style="${td};text-align:left"><a href="${o.ad_link}" target="_blank" style="color:#2563eb;word-break:break-all">${o.ad_link}</a></td>
-      </tr>`;
+  let lines=['📦 ОТЧЁТ ПО ВЫКУПАМ','Период: '+fmtDate(from)+' — '+fmtDate(to)];
+  if(client) lines.push('Заказчик: '+client);
+  lines.push('─'.repeat(40));
+  let totalInc=0,totalCost=0;
+  Object.values(groups).forEach(g=>{
+    const done=g.rows.filter(o=>o.status==='done').length;
+    const pct=g.rows.length?Math.round(done/g.rows.length*100):0;
+    const bar='█'.repeat(Math.round(pct/10))+'░'.repeat(10-Math.round(pct/10));
+    lines.push('');
+    lines.push('📌 '+g.client+' — '+g.product+(g.flacon?' ['+g.flacon+']':''));
+    lines.push('Доход: '+g.inc.toLocaleString('ru')+'₽ | Расходы: '+g.cost.toLocaleString('ru')+'₽ | Прибыль: '+((g.inc-g.cost)>=0?'+':'')+(g.inc-g.cost).toLocaleString('ru')+'₽');
+    lines.push('['+bar+'] '+pct+'% (реклама)');
+    g.rows.forEach(o=>{
+      const sl=STATUS_OPTS.find(s=>s.v===o.status)?.l||o.status;
+      lines.push('  '+fmtDate(o.date)+' | '+(o.executor||'—')+' | '+sl+(o.price_mine?' | '+o.price_mine+'₽':'')+(o.comment?' | '+o.comment:''));
     });
-    adHtml+='</tbody></table>';
-  } else {
-    adHtml='<div style="color:#6b6960;padding:14px;text-align:center">Нет ссылок на рекламу за выбранный период</div>';
-  }
-  document.getElementById('report-adlinks-table').innerHTML=adHtml;
+    totalInc+=g.inc;totalCost+=g.cost;
+  });
+  lines.push('');lines.push('─'.repeat(40));
+  lines.push('ИТОГО: '+totalInc.toLocaleString('ru')+'₽ доход | '+totalCost.toLocaleString('ru')+'₽ расходы | '+((totalInc-totalCost)>=0?'+':'')+(totalInc-totalCost).toLocaleString('ru')+'₽ прибыль');
+  lines.push('Сформировано: '+fmtDate(todayStr()));
+  const text=lines.join('\n');
+  document.getElementById('report-preview').textContent=text;
   document.getElementById('report-output').style.display='block';
 }
 
+function copyReport(){navigator.clipboard.writeText(document.getElementById('report-preview').textContent).then(()=>{const b=event.target;b.textContent='✅ Скопировано!';setTimeout(()=>b.textContent='📋 Скопировать',2000);});}
+
 function exportReportExcel(){
-  const client=document.getElementById('rep-client').value;
   const from=document.getElementById('rep-from').value;
   const to=document.getElementById('rep-to').value;
-  const rows=getReportData();
-  if(!rows.length){alert('Нет данных');return;}
-
-  const products=[...new Set(rows.map(o=>o.product).filter(Boolean))].sort();
-  const simSt=['planned','transit','received','review'];
-  const blogSt=['planned','transit','received','review','done'];
-  const razSt=['planned','transit','review'];
-
-  function cnt(prod,type,status){return rows.filter(o=>o.product===prod&&o.type===type&&o.status===status).length;}
-  function cntAll(prod,type){return rows.filter(o=>o.product===prod&&o.type===type).length;}
-
-  // CSV 1: Summary
-  let csv1='﻿';
-  csv1+='Аромат,Симка - Запланирован,Симка - В пути,Симка - Получен,Симка - Отзыв,Симка - Итого,';
-  csv1+='Блогер - Запланирован,Блогер - В пути,Блогер - Получен,Блогер - Отзыв,Блогер - Реклама,Блогер - Итого,';
-  csv1+='Раздача - Запланирован,Раздача - В пути,Раздача - Отзыв,Раздача - Итого
-';
-
-  const tS=new Array(5).fill(0),tB=new Array(6).fill(0),tR=new Array(4).fill(0);
-  products.forEach(prod=>{
-    const sv=simSt.map(s=>cnt(prod,'sim',s));const st=cntAll(prod,'sim');
-    const bv=blogSt.map(s=>cnt(prod,'blogger',s));const bt=cntAll(prod,'blogger');
-    const rv=razSt.map(s=>cnt(prod,'razdacha',s));const rt=cntAll(prod,'razdacha');
-    sv.forEach((v,i)=>tS[i]+=v);tS[4]+=st;
-    bv.forEach((v,i)=>tB[i]+=v);tB[5]+=bt;
-    rv.forEach((v,i)=>tR[i]+=v);tR[3]+=rt;
-    csv1+=`"${prod}",${sv.join(',')},${st},${bv.join(',')},${bt},${rv.join(',')},${rt}
-`;
+  const client=document.getElementById('rep-client').value;
+  let csv='Дата,Заказчик,Аромат,Флакон,Тип,Исполнитель,Статус,Цена заказчика,Моя оплата,Прибыль,Комментарий\n';
+  orders.filter(o=>(!client||o.client===client)&&o.date>=from&&o.date<=to).forEach(o=>{
+    const sl=STATUS_OPTS.find(s=>s.v===o.status)?.l||o.status;
+    const p=(o.price_client||0)-(o.price_mine||0);
+    csv+=`"${fmtDate(o.date)}","${o.client||''}","${o.product||''}","${o.flacon||''}","${o.type==='blogger'?'Блогер':'Симка'}","${o.executor||''}","${sl}","${o.price_client||0}","${o.price_mine||0}","${p}","${o.comment||''}"\n`;
   });
-  csv1+=`"ИТОГО",${tS.join(',')},${tB.join(',')},${tR.join(',')}
-`;
-  const totalAll=rows.length;
-  const doneAll=rows.filter(o=>isFinished(o)).length;
-  const pct=totalAll?Math.round(doneAll/totalAll*100):0;
-  csv1+=`"Завершено: ${doneAll} из ${totalAll} (${pct}%)"
-`;
-
-  // CSV 2: Ad links
-  const adRows=rows.filter(o=>o.type==='blogger'&&o.ad_link);
-  let csv2='﻿ID,Аромат,Блогер,Дата,Ссылка на рекламу
-';
-  adRows.forEach(o=>{
-    csv2+=`"${o.id}","${o.product||''}","${o.executor||''}","${fmtDate(o.date)}","${o.ad_link||''}"
-`;
-  });
-
-  const dl=(csv,name)=>{
-    const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
-  };
-  const prefix=(client||'все_ип')+'_'+from+'_'+to;
-  dl(csv1,'отчёт_сводка_'+prefix+'.csv');
-  if(adRows.length) setTimeout(()=>dl(csv2,'отчёт_ссылки_'+prefix+'.csv'),600);
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='отчёт_'+from+'_'+to+'.csv';a.click();
 }
-
 
 // ---- Sim report ----
 function getWeekBounds(){
