@@ -910,7 +910,8 @@ function renderOrderCard(o,context,isDone=false){
   else if(isStuck) cardClass+=' stuck';
   else if(o.confirmed) cardClass+=' confirmed-card';
 
-  const missing=getMissing(o);
+  const effectiveStatus=o.status;
+  const missing=getMissing(o,effectiveStatus);
 
   return`<div class="${cardClass}" id="card-${o.id}">
     <div class="order-meta">
@@ -962,12 +963,13 @@ function calcProfit(o){
   return (o.price_client||0)-(o.price_mine||0);
 }
 
-function getMissing(o){
+function getMissing(o,effectiveStatus){
+  const status=effectiveStatus||o.status;
   const m=[];
   if(!o.executor) m.push('исполнитель');
   if(!o.price_mine) m.push('цена');
   if(o.type==='blogger'&&!o.pickup_date) m.push('дата забора');
-  if(o.type==='blogger'&&o.status==='done'&&!o.ad_link) m.push('ссылка');
+  if(o.type==='blogger'&&status==='done'&&!o.ad_link) m.push('ссылка на рекламу');
   if(o.type==='razdacha'&&!o.cashback_pct) m.push('% кэшбэка');
   return m;
 }
@@ -1061,7 +1063,8 @@ async function _confirmOrderAction(id){
     o.status_date=todayStr();
     delete pendingStatus[id];
   }
-  const missing=getMissing(o);
+  const effectiveStatus=o.status;
+  const missing=getMissing(o,effectiveStatus);
   if(missing.length){
     o.confirmed=false;
     o.confirm_warning=missing.join(', ');
@@ -1071,9 +1074,9 @@ async function _confirmOrderAction(id){
     o.confirmed=true;
     o.confirm_warning='';
     await saveOrder(o);
-    // Update local orders array
-    const idx=orders.findIndex(x=>x.id===id);
-    if(idx>=0) orders[idx]={...o};
+    // Update local orders array properly
+    const oidx=orders.findIndex(x=>x.id===id);
+    if(oidx>=0) orders[oidx]=Object.assign(orders[oidx],o);
     refreshAll();
   }
 }
