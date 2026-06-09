@@ -9668,11 +9668,11 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
       <button class="btn btn-primary" onclick="generateReport()">Сформировать</button>
     </div>
     <div id="report-output" style="display:none">
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button class="btn" onclick="copyReport()">📋 Скопировать</button>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn" onclick="printReport()">🖨️ Печать / PDF</button>
         <button class="btn" onclick="exportReportExcel()">📊 Excel</button>
       </div>
-      <div id="report-preview" class="card" style="font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.6"></div>
+      <div id="report-preview"></div>
     </div>
   </div>
 
@@ -10792,41 +10792,119 @@ function generateReport(){
   if(!from||!to){alert('Выбери период');return;}
   let rows=orders.filter(o=>(!client||o.client===client)&&o.date>=from&&o.date<=to);
   if(!rows.length){alert('Нет данных');return;}
-  const groups={};
-  rows.forEach(o=>{
-    const k=o.client+'|||'+o.product;
-    if(!groups[k])groups[k]={client:o.client,product:o.product,flacon:o.flacon,rows:[],inc:0,cost:0};
-    groups[k].rows.push(o);
-    groups[k].inc+=o.price_client||0;
-    groups[k].cost+=o.price_mine||0;
-  });
-  let lines=['📦 ОТЧЁТ ПО ВЫКУПАМ','Период: '+fmtDate(from)+' — '+fmtDate(to)];
-  if(client) lines.push('Заказчик: '+client);
-  lines.push('─'.repeat(40));
-  let totalInc=0,totalCost=0;
-  Object.values(groups).forEach(g=>{
-    const done=g.rows.filter(o=>o.status==='done').length;
-    const pct=g.rows.length?Math.round(done/g.rows.length*100):0;
-    const bar='█'.repeat(Math.round(pct/10))+'░'.repeat(10-Math.round(pct/10));
-    lines.push('');
-    lines.push('📌 '+g.client+' — '+g.product+(g.flacon?' ['+g.flacon+']':''));
-    lines.push('Доход: '+g.inc.toLocaleString('ru')+'₽ | Расходы: '+g.cost.toLocaleString('ru')+'₽ | Прибыль: '+((g.inc-g.cost)>=0?'+':'')+(g.inc-g.cost).toLocaleString('ru')+'₽');
-    lines.push('['+bar+'] '+pct+'% (реклама)');
-    g.rows.forEach(o=>{
-      const sl=STATUS_OPTS.find(s=>s.v===o.status)?.l||o.status;
-      lines.push('  '+fmtDate(o.date)+' | '+(o.executor||'—')+' | '+sl+(o.price_mine?' | '+o.price_mine+'₽':'')+(o.comment?' | '+o.comment:''));
-    });
-    totalInc+=g.inc;totalCost+=g.cost;
-  });
-  lines.push('');lines.push('─'.repeat(40));
-  lines.push('ИТОГО: '+totalInc.toLocaleString('ru')+'₽ доход | '+totalCost.toLocaleString('ru')+'₽ расходы | '+((totalInc-totalCost)>=0?'+':'')+(totalInc-totalCost).toLocaleString('ru')+'₽ прибыль');
-  lines.push('Сформировано: '+fmtDate(todayStr()));
-  const text=lines.join('\n');
-  document.getElementById('report-preview').textContent=text;
+
+  const STATUS_LABEL={planned:'Запланирован',transit:'В пути',received:'Получен',review:'Отзыв оставлен',done:'Завершён'};
+  const STATUS_COLOR={planned:'#fef2f2;color:#dc2626',transit:'#fefce8;color:#ca8a04',received:'#eff6ff;color:#2563eb',review:'#f0fdf4;color:#16a34a',done:'#dcfce7;color:#15803d'};
+  const TYPE_LABEL={sim:'Симка',blogger:'Блогер',razdacha:'Раздача'};
+
+  const total=rows.length;
+  const done=rows.filter(o=>o.status==='done').length;
+  const inWork=rows.filter(o=>o.status!=='done'&&o.status!=='planned').length;
+  const planned=rows.filter(o=>o.status==='planned').length;
+  const today=todayStr();
+  const overdue=rows.filter(o=>o.status!=='done'&&o.date<today).length;
+  const pct=total?Math.round(done/total*100):0;
+
+  function badge(status){
+    const c=STATUS_COLOR[status]||'#f5f5f5;color:#555';
+    return`<span style="display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:12px;background:${c.split(';')[0]};${c.split(';')[1]}">${STATUS_LABEL[status]||status}</span>`;
+  }
+
+  function makeTable(typeRows,typeName){
+    if(!typeRows.length)return'';
+    const isBlogger=typeRows[0].type==='blogger';
+    const rows_html=typeRows.map(o=>`
+      <tr>
+        <td style="color:#6b7280;font-size:12px">${fmtDate(o.date)}</td>
+        <td style="font-weight:500">${o.product||'—'}</td>
+        <td style="color:#374151">${o.executor||'—'}</td>
+        ${isBlogger?`<td>${o.ad_link?`<a href="${o.ad_link}" target="_blank" style="color:#2563eb;font-size:12px;text-decoration:none">Открыть →</a>`:'—'}</td>`:''}
+        <td>${badge(o.status)}</td>
+        ${o.comment?`<td style="font-size:12px;color:#6b7280">${o.comment}</td>`:'<td></td>'}
+      </tr>`).join('');
+    return`
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${typeName} — ${typeRows.length} шт</div>
+        <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:#f9fafb">
+                <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e5e7eb">Дата</th>
+                <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e5e7eb">Аромат</th>
+                <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e5e7eb">${isBlogger?'Блогер':'Симка'}</th>
+                ${isBlogger?`<th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e5e7eb">Реклама</th>`:''}
+                <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e5e7eb">Статус</th>
+                <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #e5e7eb">Комментарий</th>
+              </tr>
+            </thead>
+            <tbody>${rows_html}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  const sims=rows.filter(o=>o.type==='sim').sort((a,b)=>a.date.localeCompare(b.date));
+  const bloggers=rows.filter(o=>o.type==='blogger').sort((a,b)=>a.date.localeCompare(b.date));
+  const razdachi=rows.filter(o=>o.type==='razdacha').sort((a,b)=>a.date.localeCompare(b.date));
+
+  const html=`
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:20px 24px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:16px;font-weight:600;color:#111827">📦 Отчёт по выкупам</div>
+          <div style="font-size:13px;color:#6b7280;margin-top:2px">Период: ${fmtDate(from)} — ${fmtDate(to)}${client?' · '+client:''}</div>
+        </div>
+        <div style="font-size:12px;color:#9ca3af">Сформировано: ${fmtDate(todayStr())}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:16px">
+        <div style="background:#f9fafb;border-radius:8px;padding:12px 14px">
+          <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Всего</div>
+          <div style="font-size:22px;font-weight:600;color:#111827">${total}</div>
+        </div>
+        <div style="background:#f0fdf4;border-radius:8px;padding:12px 14px">
+          <div style="font-size:11px;color:#16a34a;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Завершено</div>
+          <div style="font-size:22px;font-weight:600;color:#15803d">${done}</div>
+        </div>
+        <div style="background:#fefce8;border-radius:8px;padding:12px 14px">
+          <div style="font-size:11px;color:#ca8a04;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">В работе</div>
+          <div style="font-size:22px;font-weight:600;color:#92400e">${inWork}</div>
+        </div>
+        <div style="background:#fef2f2;border-radius:8px;padding:12px 14px">
+          <div style="font-size:11px;color:#dc2626;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Просрочено</div>
+          <div style="font-size:22px;font-weight:600;color:#991b1b">${overdue}</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:#6b7280;margin-bottom:5px">
+          <span>Прогресс выполнения</span>
+          <span style="font-weight:600;color:#111827">${pct}%</span>
+        </div>
+        <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:#16a34a;border-radius:4px;transition:width .4s"></div>
+        </div>
+      </div>
+    </div>
+
+    ${makeTable(sims,'Симки')}
+    ${makeTable(bloggers,'Блогеры')}
+    ${makeTable(razdachi,'Раздачи')}
+  `;
+
+  document.getElementById('report-preview').innerHTML=html;
   document.getElementById('report-output').style.display='block';
 }
 
-function copyReport(){navigator.clipboard.writeText(document.getElementById('report-preview').textContent).then(()=>{const b=event.target;b.textContent='✅ Скопировано!';setTimeout(()=>b.textContent='📋 Скопировать',2000);});}
+function printReport(){
+  const content=document.getElementById('report-preview').innerHTML;
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Отчёт по выкупам</title>
+  <style>body{font-family:sans-serif;padding:24px;color:#111}table{width:100%;border-collapse:collapse}th,td{padding:7px 10px;border:1px solid #e5e7eb;font-size:12px}th{background:#f9fafb}@media print{button{display:none}}</style>
+  </head><body>${content}</body></html>`);
+  w.document.close();
+  w.print();
+}
 
 function exportReportExcel(){
   const from=document.getElementById('rep-from').value;
