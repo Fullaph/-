@@ -10300,8 +10300,10 @@ function renderToday(containerId){
   if(!el)return;
   const mine=myOrders();
 
-  // show only today's unconfirmed
+  // show today's + overdue unconfirmed
+  const overdueOrders=mine.filter(o=>o.date<today&&!o.confirmed&&!isFinished(o)&&o.status!=='planned');
   const todayOrders=mine.filter(o=>o.date===today&&!o.confirmed&&!isFinished(o));
+  const allActiveOrders=[...overdueOrders,...todayOrders];
   const confirmedToday=mine.filter(o=>o.date===today&&o.confirmed);
   const total=mine.filter(o=>o.date===today).length;
   const done=confirmedToday.length;
@@ -10309,6 +10311,12 @@ function renderToday(containerId){
   const pctColor=pct===100?'var(--green)':pct>50?'var(--amber)':'var(--red)';
 
   const groups={};
+  // overdue orders first with label
+  const overdueGroups={};
+  overdueOrders.forEach(o=>{
+    if(!overdueGroups[o.client])overdueGroups[o.client]=[];
+    overdueGroups[o.client].push(o);
+  });
   todayOrders.forEach(o=>{
     if(!groups[o.client])groups[o.client]=[];
     groups[o.client].push(o);
@@ -10323,6 +10331,16 @@ function renderToday(containerId){
       <div style="height:100%;width:${pct}%;background:${pctColor};border-radius:4px;transition:width .4s"></div>
     </div>
   </div>`;
+
+  // Render overdue first
+  if(overdueOrders.length){
+    html+=`<div class="group-label" style="color:var(--red-text);background:var(--red-bg);padding:6px 8px;border-radius:6px;margin-bottom:6px">⚠ Просроченные (${overdueOrders.length})</div>`;
+    Object.entries(overdueGroups).forEach(([client,ords])=>{
+      html+=`<div class="group-label">${client}</div>`;
+      ords.forEach(o=>{html+=renderOrderCard(o,'today');});
+    });
+    if(todayOrders.length) html+=`<div class="group-label" style="margin-top:10px">📅 Сегодня</div>`;
+  }
 
   Object.entries(groups).forEach(([client,ords])=>{
     html+=`<div class="group-label">${client}</div>`;
@@ -10341,7 +10359,16 @@ function renderToday(containerId){
 function renderOrderCard(o,context,isDone=false){
   const userColor=getUserColor(o.assigned_to)||'var(--border)';
   const stDays=o.status_date?Math.floor((new Date(todayStr())-new Date(o.status_date))/86400000):0;
-  const isStuck=stDays>=5&&o.status!=='done';
+  // Зависли: считаем от pickup_date+3дня если есть, иначе от status_date+5дней
+  let isStuck=false;
+  let stuckDays=stDays;
+  if(o.pickup_date&&(o.status==='transit'||o.status==='planned')){
+    const daysSincePickup=Math.floor((new Date(todayStr())-new Date(o.pickup_date))/86400000);
+    stuckDays=daysSincePickup;
+    isStuck=daysSincePickup>3&&o.status!=='done'&&o.status!=='review'&&o.status!=='received';
+  } else {
+    isStuck=stDays>=5&&o.status!=='done';
+  }
   const statusLabel=STATUS_OPTS.find(s=>s.v===o.status)?.l||o.status;
 
   let cardClass='order-card';
@@ -10361,7 +10388,7 @@ function renderOrderCard(o,context,isDone=false){
       <span class="badge b-${o.type==='blogger'?'blue':o.type==='razdacha'?'gray':'amber'}">${o.type==='blogger'?'Блогер':o.type==='razdacha'?'Раздача':'Симка'}</span>
       ${o.type!=='razdacha'?`<button onclick="toggleOrderType('${o.id}')" style="font-size:10px;padding:2px 7px;border-radius:12px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2)" title="Сменить тип">⇄</button>`:''}
       <span style="font-size:11px;color:var(--text2)">${fmtDate(o.date)}</span>
-      ${isStuck?`<span class="badge b-red" style="font-size:10px">⚠ ${stDays}дн</span>`:''}
+      ${isStuck?`<span class="badge b-red" style="font-size:10px">⚠ ${stuckDays}дн</span>`:''}
       ${isDone?'<span class="badge b-green">✓</span>':''}
     </div>
     <div class="order-grid">
@@ -10371,7 +10398,7 @@ function renderOrderCard(o,context,isDone=false){
           :`<div class="ac-wrap"><input type="text" value="${o.executor||''}" placeholder="Ник блогера..." style="font-size:12px;padding:5px 8px;border-left:3px solid ${STATUS_COLOR[o.status||'planned']}" oninput="acSearchInline(this,'${o.id}')" onblur="setTimeout(()=>{hideAcInline('${o.id}');updateField('${o.id}','executor',this.value)},200)"><div class="ac-list" id="ac-inline-${o.id}" style="display:none"></div></div>`
         }
         <input type="number" value="${o.price_mine||''}" placeholder="Моя оплата ₽" style="font-size:12px;padding:5px 8px" onchange="updateField('${o.id}','price_mine',parseFloat(this.value)||0)">
-        ${o.type==='blogger'?`<input type="date" value="${o.pickup_date||''}" style="font-size:11px;padding:4px 6px" onchange="updateField('${o.id}','pickup_date',this.value)">`:''}
+        <input type="date" value="${o.pickup_date||''}" placeholder="Дата получения..." style="font-size:11px;padding:4px 6px" onchange="updateField('${o.id}','pickup_date',this.value)">
         ${o.type==='blogger'&&(o.status==='done'||(pendingStatus['${o.id}']||'')==='done')?`<input type="text" value="${o.ad_link||''}" placeholder="Ссылка на рекламу... (обязательно)" style="font-size:11px;padding:4px 6px;${o.ad_link?'border-color:var(--green)':'border-color:var(--amber)'}" onchange="updateField('${o.id}','ad_link',this.value)">`:''}
         ${o.type==='razdacha'?`<div style="display:flex;gap:6px;align-items:center;margin-top:2px"><span style="font-size:11px;color:var(--text2)">% кэшбэка:</span><input type="number" value="${o.cashback_pct||''}" placeholder="%" style="font-size:11px;padding:3px 6px;width:60px" onchange="updateField('${o.id}','cashback_pct',parseFloat(this.value)||0)"></div>`:''}
         <input type="text" value="${o.comment||''}" placeholder="Комментарий..." style="font-size:11px;padding:3px 7px" onchange="updateField('${o.id}','comment',this.value)">
@@ -10406,7 +10433,7 @@ function getMissing(o){
   const m=[];
   if(!o.executor) m.push('исполнитель');
   if(!o.price_mine) m.push('цена');
-  if(o.type==='blogger'&&!o.pickup_date) m.push('дата забора');
+  if(!o.pickup_date) m.push('дата забора');
   if(o.type==='blogger'&&o.status==='done'&&!o.ad_link) m.push('ссылка');
   if(o.type==='razdacha'&&!o.cashback_pct) m.push('% кэшбэка');
   return m;
