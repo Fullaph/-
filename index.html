@@ -10252,10 +10252,21 @@ function showHint(id,msg,type){
 
 // ---- Helper: is order finished ----
 function isFinished(o){
-  // Only truly finished when confirmed=true AND at final status
-  if(o.type==='blogger') return o.status==='done'&&o.confirmed;
-  if(o.type==='razdacha') return o.status==='review'&&o.confirmed;
-  if(o.type==='sim') return o.status==='review'&&o.confirmed;
+  // Finished = нужный статус + все обязательные поля заполнены
+  const hasExecutor=!!(o.executor&&o.executor.trim());
+  const hasPrice=!!(o.price_mine);
+  const hasPickup=!!(o.pickup_date);
+  if(o.type==='blogger'){
+    const hasLink=!!(o.ad_link&&o.ad_link.trim());
+    return o.status==='done'&&hasExecutor&&hasPrice&&hasPickup&&hasLink;
+  }
+  if(o.type==='sim'){
+    return o.status==='review'&&hasExecutor&&hasPrice&&hasPickup;
+  }
+  if(o.type==='razdacha'){
+    const hasCashback=!!(o.cashback_pct);
+    return o.status==='review'&&hasExecutor&&hasPrice&&hasPickup&&hasCashback;
+  }
   return false;
 }
 
@@ -10301,7 +10312,7 @@ function renderToday(containerId){
   const mine=myOrders();
 
   // show today's + overdue unconfirmed
-  const overdueOrders=mine.filter(o=>o.date<today&&!o.confirmed&&!isFinished(o)&&o.status!=='planned');
+  const overdueOrders=mine.filter(o=>o.date<today&&o.status==='planned');
   const todayOrders=mine.filter(o=>o.date===today&&!o.confirmed&&!isFinished(o));
   const allActiveOrders=[...overdueOrders,...todayOrders];
   const confirmedToday=mine.filter(o=>o.date===today&&o.confirmed);
@@ -10638,6 +10649,7 @@ function renderOrders(){
   const mine=myOrders();
   let rows=mine.filter(o=>{
     if(o.status==='planned')return false;
+    if(isFinished(o))return false; // завершённые уходят в архив
     if(from&&o.date<from)return false;
     if(to&&o.date>to)return false;
     if(fClient&&o.client!==fClient)return false;
