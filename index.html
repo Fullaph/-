@@ -135,6 +135,7 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
     <button class="tab" onclick="showTab(&#39;report&#39;)">📋 Отчёт</button>
     <button class="tab" onclick="showTab(&#39;simreport&#39;)">📊 Симки</button>
     <button class="tab" onclick="showTab(&#39;refs&#39;)">⚙️ Справочники</button>
+    <button class="tab" onclick="showTab(&#39;invoice&#39;)">🧾 Счёт</button>
     <button class="tab" onclick="showTab(&#39;archive&#39;)">📦 Архив</button>
   </div>
 
@@ -9737,6 +9738,28 @@ select.status-sel{font-size:11px;padding:3px 8px;border-radius:12px;font-weight:
   </div>
 </div>
 
+  <!-- INVOICE -->
+  <div id="tab-invoice" class="section">
+    <div class="card">
+      <div class="card-title">Счёт для заказчика</div>
+      <div class="row">
+        <div class="field"><label>ИП / Заказчик</label>
+          <select id="inv-client" onchange="updateInvoicePreview()">
+            <option value="">— выбери —</option>
+          </select>
+        </div>
+        <div class="field" style="max-width:140px"><label>Дата с</label><input type="date" id="inv-from" oninput="updateInvoicePreview()"></div>
+        <div class="field" style="max-width:140px"><label>Дата по</label><input type="date" id="inv-to" oninput="updateInvoicePreview()"></div>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Реквизиты для оплаты</label>
+        <textarea id="inv-requisites" rows="3" style="font-family:'Golos Text',sans-serif;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);width:100%;resize:vertical" placeholder="Например: Сбербанк 4276 **** **** 1234, Иванов И.И." oninput="updateInvoicePreview()"></textarea>
+      </div>
+      <button class="btn" onclick="copyInvoice()">📋 Скопировать счёт</button>
+    </div>
+    <div id="invoice-preview" class="card" style="font-family:monospace;font-size:13px;white-space:pre-wrap;line-height:1.8;display:none"></div>
+  </div>
+
   <div id="tab-archive" class="section">
     <div class="loading">Загрузка...</div>
   </div>
@@ -9808,7 +9831,7 @@ const DEF_BLOGGERS=["@lina3_33","@Seva2406","@gadzhimetova_k","@diana_karnetsyan
 
 // ---- State ----
 let orders=[];
-let lists={products:[...DEF_PRODUCTS],bloggers:[...DEF_BLOGGERS],flacons:[...DEF_FLACONS],clients:[]};
+let lists={products:[...DEF_PRODUCTS],bloggers:[...DEF_BLOGGERS],flacons:[...DEF_FLACONS],clients:[],clientsData:[]};
 let currentUser=null;
 let allUsers=[];
 let selectedColor=COLORS[0];
@@ -9850,11 +9873,24 @@ async function loadLists(){
     if(s.bloggers) s.bloggers.forEach(p=>{if(!lists.bloggers.find(x=>x.toLowerCase()===p.toLowerCase()))lists.bloggers.push(p);});
     if(s.flacons)  s.flacons.forEach(p=>{if(!lists.flacons.find(x=>x.toLowerCase()===p.toLowerCase()))lists.flacons.push(p);});
     if(s.clients)  s.clients.forEach(p=>{if(!lists.clients.find(x=>x.toLowerCase()===p.toLowerCase()))lists.clients.push(p);});
+    if(s.clientsData) lists.clientsData=s.clientsData;
   }
 }
 
 async function saveLists(){
   await db.from('tasks').upsert({id:'__lists__',data:lists,updated_at:new Date().toISOString()});
+}
+
+function getClientData(name){
+  return lists.clientsData.find(x=>x.name.toLowerCase()===name.toLowerCase())||{name,own:false};
+}
+
+async function toggleClientOwn(name){
+  const idx=lists.clientsData.findIndex(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(idx>=0) lists.clientsData[idx].own=!lists.clientsData[idx].own;
+  else lists.clientsData.push({name,own:true});
+  await saveLists();
+  renderRefs();
 }
 
 async function loadUsers(){
@@ -10305,32 +10341,46 @@ function renderArchive(){
 }
 
 // ---- Today tab ----
+let todayFilters={client:'',status:'',onlyOverdue:false};
+
+function applyTodayFilters(){
+  todayFilters.client=document.getElementById('today-f-client')?.value||'';
+  todayFilters.status=document.getElementById('today-f-status')?.value||'';
+  todayFilters.onlyOverdue=document.getElementById('today-f-overdue')?.checked||false;
+  renderToday('today-view');
+}
+
 function renderToday(containerId){
   const today=todayStr();
   const el=document.getElementById(containerId);
   if(!el)return;
   const mine=myOrders();
 
-  // show today's + overdue unconfirmed
+  // show today's + overdue (только запланированные) unconfirmed
   const overdueOrders=mine.filter(o=>o.date<today&&o.status==='planned');
   const todayOrders=mine.filter(o=>o.date===today&&!o.confirmed&&!isFinished(o));
-  const allActiveOrders=[...overdueOrders,...todayOrders];
   const confirmedToday=mine.filter(o=>o.date===today&&o.confirmed);
   const total=mine.filter(o=>o.date===today).length;
   const done=confirmedToday.length;
   const pct=total?Math.round(done/total*100):0;
   const pctColor=pct===100?'var(--green)':pct>50?'var(--amber)':'var(--red)';
 
-  const groups={};
-  // overdue orders first with label
-  const overdueGroups={};
-  overdueOrders.forEach(o=>{
-    if(!overdueGroups[o.client])overdueGroups[o.client]=[];
-    overdueGroups[o.client].push(o);
+  // клиенты для фильтра
+  const allClients=[...new Set([...overdueOrders,...todayOrders].map(o=>o.client).filter(Boolean))].sort();
+  const fClient=todayFilters.client;
+  const fStatus=todayFilters.status;
+  const fOverdue=todayFilters.onlyOverdue;
+
+  // применяем фильтры
+  const filteredOverdue=overdueOrders.filter(o=>{
+    if(fClient&&o.client!==fClient)return false;
+    if(fStatus&&o.status!==fStatus)return false;
+    return true;
   });
-  todayOrders.forEach(o=>{
-    if(!groups[o.client])groups[o.client]=[];
-    groups[o.client].push(o);
+  const filteredToday=fOverdue?[]:todayOrders.filter(o=>{
+    if(fClient&&o.client!==fClient)return false;
+    if(fStatus&&o.status!==fStatus)return false;
+    return true;
   });
 
   const dateLabel=formatDateFull(today);
@@ -10343,16 +10393,51 @@ function renderToday(containerId){
     </div>
   </div>`;
 
+  // Панель фильтров
+  html+=`<div class="card" style="padding:10px 14px;margin-bottom:10px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div class="field" style="min-width:130px">
+        <label>ИП</label>
+        <select id="today-f-client" onchange="applyTodayFilters()">
+          <option value="">— все —</option>
+          ${allClients.map(c=>`<option value="${c}"${fClient===c?' selected':''}>${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" style="min-width:130px">
+        <label>Статус</label>
+        <select id="today-f-status" onchange="applyTodayFilters()">
+          <option value="">— все —</option>
+          ${STATUS_OPTS.map(s=>`<option value="${s.v}"${fStatus===s.v?' selected':''}>${s.l}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;padding-bottom:2px">
+        <input type="checkbox" id="today-f-overdue" ${fOverdue?'checked':''} onchange="applyTodayFilters()" style="width:14px;height:14px;cursor:pointer">
+        <label for="today-f-overdue" style="font-size:13px;cursor:pointer;color:var(--red)">Только просрочки</label>
+      </div>
+      <button class="btn btn-sm" onclick="todayFilters={client:'',status:'',onlyOverdue:false};renderToday('today-view')">Сбросить</button>
+    </div>
+  </div>`;
+
   // Render overdue first
-  if(overdueOrders.length){
-    html+=`<div class="group-label" style="color:var(--red-text);background:var(--red-bg);padding:6px 8px;border-radius:6px;margin-bottom:6px">⚠ Просроченные (${overdueOrders.length})</div>`;
+  if(filteredOverdue.length){
+    html+=`<div class="group-label" style="color:var(--red-text);background:var(--red-bg);padding:6px 8px;border-radius:6px;margin-bottom:6px">⚠ Просроченные (${filteredOverdue.length})</div>`;
+    const overdueGroups={};
+    filteredOverdue.forEach(o=>{
+      if(!overdueGroups[o.client])overdueGroups[o.client]=[];
+      overdueGroups[o.client].push(o);
+    });
     Object.entries(overdueGroups).forEach(([client,ords])=>{
       html+=`<div class="group-label">${client}</div>`;
       ords.forEach(o=>{html+=renderOrderCard(o,'today');});
     });
-    if(todayOrders.length) html+=`<div class="group-label" style="margin-top:10px">📅 Сегодня</div>`;
+    if(filteredToday.length) html+=`<div class="group-label" style="margin-top:10px">📅 Сегодня</div>`;
   }
 
+  const groups={};
+  filteredToday.forEach(o=>{
+    if(!groups[o.client])groups[o.client]=[];
+    groups[o.client].push(o);
+  });
   Object.entries(groups).forEach(([client,ords])=>{
     html+=`<div class="group-label">${client}</div>`;
     ords.forEach(o=>{html+=renderOrderCard(o,'today');});
@@ -10419,7 +10504,7 @@ function renderOrderCard(o,context,isDone=false){
           onchange="updateStatus('${o.id}',this.value)">
           ${(o.type==='razdacha'?STATUS_OPTS_RAZDACHA:STATUS_OPTS.filter(s=>o.type==='sim'?s.v!=='done':true)).map(s=>`<option value="${s.v}"${(pendingStatus['${o.id}']||o.status)===s.v?' selected':''}>${s.l}</option>`).join('')}
         </select>
-        <div style="font-size:11px;color:var(--text2)">Цена заказчика: ${(o.price_client||0).toLocaleString('ru')}₽</div>
+        <input type="number" value="${o.price_client||''}" placeholder="Цена заказчика ₽" style="font-size:12px;padding:5px 8px" onchange="updateField('${o.id}','price_client',parseFloat(this.value)||0)">
         ${o.price_mine&&o.price_client?`<div style="font-size:11px;font-weight:600;color:var(--${calcProfit(o)>=0?'green':'red'})">${calcProfit(o)>=0?'+':''}${calcProfit(o).toLocaleString('ru')}₽</div>`:''}
         ${missing.length?`<div class="warn">⚠ ${missing.join(', ')}</div>`:''}
       </div>
@@ -10492,24 +10577,38 @@ async function updateField(id,field,val){
 function updateStatus(id,val){
   // Store pending status change - only saved when Принять is clicked
   pendingStatus[id]=val;
-  // Re-render card so ad_link field appears for blogger when status=done
   const o=orders.find(x=>x.id===id);
   if(!o)return;
   const card=document.getElementById('card-'+id);
   if(!card)return;
-  // For blogger switching to 'done' - need to show ad_link field
-  // Re-render the whole card
-  const context=card.closest('#new-tab-today')?'tasks':card.closest('#orders-list')?'orders':card.closest('#today-view')?'today':'tasks';
-  card.outerHTML=renderOrderCard(o,context,isFinished(o));
-  // Restore status select to pending value
-  const newCard=document.getElementById('card-'+id);
-  if(newCard){
-    const sel=newCard.querySelector('select.status-sel');
-    if(sel){
-      sel.value=val;
-      sel.style.borderColor=STATUS_COLOR[val]||'';
-      sel.style.color=STATUS_COLOR[val]||'';
-      sel.style.background=STATUS_BG[val]||'';
+  // Только обновляем цвет селекта и показываем/скрываем поле ссылки
+  // без перерендера всей карточки (чтобы не было пересортировки)
+  const sel=card.querySelector('select.status-sel');
+  if(sel){
+    sel.style.borderColor=STATUS_COLOR[val]||'';
+    sel.style.color=STATUS_COLOR[val]||'';
+    sel.style.background=STATUS_BG[val]||'';
+  }
+  // Если блогер переключился на 'done' - показать поле ссылки
+  if(o.type==='blogger'){
+    const fields=card.querySelector('.order-fields');
+    if(fields){
+      let adInput=card.querySelector('.ad-link-field');
+      if(val==='done'&&!adInput){
+        const commentInput=fields.querySelector('input[placeholder="Комментарий..."]');
+        if(commentInput){
+          const div=document.createElement('input');
+          div.type='text';
+          div.className='ad-link-field';
+          div.value=o.ad_link||'';
+          div.placeholder='Ссылка на рекламу... (обязательно)';
+          div.style.cssText='font-size:11px;padding:4px 6px;'+(o.ad_link?'border-color:var(--green)':'border-color:var(--amber)');
+          div.onchange=function(){updateField(id,'ad_link',this.value);};
+          fields.insertBefore(div,commentInput);
+        }
+      } else if(val!=='done'&&adInput){
+        adInput.remove();
+      }
     }
   }
 }
@@ -10918,10 +11017,7 @@ function generateReport(){
           <div style="font-size:11px;color:#ca8a04;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">В работе</div>
           <div style="font-size:22px;font-weight:600;color:#92400e">${inWork}</div>
         </div>
-        <div style="background:#fef2f2;border-radius:8px;padding:12px 14px">
-          <div style="font-size:11px;color:#dc2626;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Просрочено</div>
-          <div style="font-size:22px;font-weight:600;color:#991b1b">${overdue}</div>
-        </div>
+
       </div>
 
       <div>
@@ -11038,7 +11134,25 @@ function exportSimExcel(){
 
 // ---- Refs ----
 function renderRefs(){
-  ['clients','products','flacons','bloggers'].forEach(key=>{
+  // Clients — особый рендер с флажком "свой"
+  const clientEl=document.getElementById('ref-clients-list');
+  if(clientEl){
+    clientEl.innerHTML=lists.clients.map((item,i)=>{
+      const cd=getClientData(item);
+      return`<div style="display:flex;align-items:center;gap:5px;padding:5px 0;border-bottom:0.5px solid var(--border)">
+        <input type="text" value="${item}" style="flex:1;font-size:12px;padding:3px 6px" id="ref-ed-clients-${i}"
+          onkeydown="if(event.key==='Enter')refRename('clients',${i},this.value)">
+        <label title="${cd.own?'Свой (+50₽)':'Чужой (+150₽)'}" style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;white-space:nowrap;color:${cd.own?'var(--green)':'var(--text2)'}">
+          <input type="checkbox" ${cd.own?'checked':''} onchange="toggleClientOwn('${item.replace(/'/g,"\'")}')">
+          ${cd.own?'свой +50₽':'чужой +150₽'}
+        </label>
+        <button class="btn btn-sm" onclick="refRename('clients',${i},document.getElementById('ref-ed-clients-${i}').value)">✓</button>
+        <button class="btn btn-sm btn-danger" onclick="refDelete('clients',${i})">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  ['products','flacons','bloggers'].forEach(key=>{
     const el=document.getElementById('ref-'+key+'-list');
     if(!el)return;
     el.innerHTML=lists[key].map((item,i)=>`<div style="display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:0.5px solid var(--border)">
@@ -11084,6 +11198,97 @@ async function refDelete(key,idx){
   renderRefs();
 }
 
+// ---- Invoice ----
+function initInvoice(){
+  const sel=document.getElementById('inv-client');
+  if(!sel)return;
+  const clients=[...new Set(orders.map(o=>o.client).filter(Boolean))].sort();
+  const cur=sel.value;
+  sel.innerHTML='<option value="">— выбери —</option>'+clients.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value=cur;
+  // default dates: current week mon-sun
+  const{from,to}=getWeekBounds();
+  if(!document.getElementById('inv-from').value) document.getElementById('inv-from').value=from;
+  if(!document.getElementById('inv-to').value) document.getElementById('inv-to').value=to;
+  updateInvoicePreview();
+}
+
+function updateInvoicePreview(){
+  const client=document.getElementById('inv-client')?.value||'';
+  const from=document.getElementById('inv-from')?.value||'';
+  const to=document.getElementById('inv-to')?.value||'';
+  const requisites=document.getElementById('inv-requisites')?.value||'';
+  const preview=document.getElementById('invoice-preview');
+  if(!preview)return;
+  if(!client||!from||!to){preview.style.display='none';return;}
+
+  const cd=getClientData(client);
+  const serviceFee=cd.own?50:150;
+  const rows=orders.filter(o=>o.client===client&&o.date>=from&&o.date<=to);
+  if(!rows.length){preview.textContent='Нет заданий за выбранный период.';preview.style.display='block';return;}
+
+  // группируем по типу и аромату
+  const groups={sim:{},blogger:{},razdacha:{}};
+  rows.forEach(o=>{
+    const type=o.type||'sim';
+    const key=(o.product||'—')+'|'+(o.price_client||0);
+    if(!groups[type][key])groups[type][key]={product:o.product||'—',price:o.price_client||0,qty:0};
+    groups[type][key].qty++;
+  });
+
+  const typeLabels={sim:'Симки',blogger:'Блогеры',razdacha:'Раздачи'};
+  let totalGoods=0,totalService=0;
+  let lines=[];
+
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push(`📦 СЧЁТ НА ОПЛАТУ`);
+  lines.push(`Заказчик: ${client}`);
+  lines.push(`Период: ${fmtDate(from)} — ${fmtDate(to)}`);
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  ['sim','blogger','razdacha'].forEach(type=>{
+    const grp=groups[type];
+    if(!Object.keys(grp).length)return;
+    lines.push('');
+    lines.push(`${typeLabels[type]}:`);
+    Object.values(grp).forEach(g=>{
+      const goodsTotal=g.price*g.qty;
+      const serviceTotal=serviceFee*g.qty;
+      totalGoods+=goodsTotal;
+      totalService+=serviceTotal;
+      lines.push(`  ${g.product}`);
+      lines.push(`  Товар:   ${g.price.toLocaleString('ru')}₽ × ${g.qty} шт = ${goodsTotal.toLocaleString('ru')}₽`);
+      lines.push(`  Услуга:  ${serviceFee}₽ × ${g.qty} шт = ${serviceTotal.toLocaleString('ru')}₽`);
+    });
+  });
+
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  lines.push(`Итого товар:    ${totalGoods.toLocaleString('ru')}₽`);
+  lines.push(`Итого услуги:   ${totalService.toLocaleString('ru')}₽`);
+  lines.push(`ИТОГО К ОПЛАТЕ: ${(totalGoods+totalService).toLocaleString('ru')}₽`);
+  lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  if(requisites.trim()){
+    lines.push('');
+    lines.push('Реквизиты для оплаты:');
+    lines.push(requisites.trim());
+  }
+
+  preview.textContent=lines.join('
+');
+  preview.style.display='block';
+}
+
+function copyInvoice(){
+  const preview=document.getElementById('invoice-preview');
+  if(!preview||!preview.textContent.trim()){alert('Сначала выбери заказчика и период');return;}
+  navigator.clipboard.writeText(preview.textContent).then(()=>{
+    const b=event.target;b.textContent='✅ Скопировано';
+    setTimeout(()=>b.textContent='📋 Скопировать счёт',2000);
+  });
+}
+
 // ---- Utils ----
 function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function isoDate(d){return d.toISOString().slice(0,10);}
@@ -11111,6 +11316,7 @@ function showTab(t){
   if(t==='report') initReport();
   if(t==='simreport') initSimReport();
   if(t==='refs') renderRefs();
+  if(t==='invoice') initInvoice();
   if(t==='archive') renderArchive();
 }
 
